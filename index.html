@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
+<title>Мой бюджет</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+
+body{
+  font-family:'DM Sans',sans-serif;
+  min-height:100vh;
+  background:#c9d9d1;
+  overflow-x:hidden;
+  padding-bottom:80px;
+}
+
+/* ── HERO MOUNTAIN BACKGROUND ── */
+.hero{
+  position:relative;
+  width:100%;
+  height:260px;
+  overflow:hidden;
+  flex-shrink:0;
+}
+.hero-sky{
+  position:absolute;inset:0;
+  background:linear-gradient(180deg,#b8cdc5 0%,#96b8aa 45%,#6f9e8c 100%);
+}
+/* SVG mountain layers */
+.hero-svg{position:absolute;bottom:0;left:0;width:100%;height:200px}
+/* fog wisps */
+.hero-fog{
+  position:absolute;bottom:60px;left:0;right:0;height:60px;
+  background:linear-gradient(180deg,rgba(196,218,210,0) 0%,rgba(196,218,210,0.55) 60%,rgba(196,218,210,0) 100%);
+}
+/* bottom fade into content */
+.hero-fade{
+  position:absolute;bottom:0;left:0;right:0;height:100px;
+  background:linear-gradient(180deg,transparent 0%,#c9d9d1 100%);
+}
+/* top left branding overlay */
+.hero-brand{
+  position:absolute;top:28px;left:20px;
+  color:#0f2820;
+}
+.hero-brand-small{font-size:10px;opacity:0.55;letter-spacing:0.06em;margin-bottom:2px}
+.hero-brand-big{
+  font-family:'Playfair Display',serif;
+  font-size:22px;font-weight:700;line-height:1;
+  color:#0f2820;
+}
+.hero-brand-big span{color:#fff}
+
+/* ── MAIN CARD (like PathFinders bottom card) ── */
+.main-card{
+  margin:0 14px;
+  background:rgba(15,40,32,0.78);
+  border-radius:22px;
+  padding:20px 18px 18px;
+  backdrop-filter:blur(12px);
+  border:0.5px solid rgba(168,212,192,0.15);
+  position:relative;
+  z-index:2;
+  margin-top:-60px;
+}
+.mc-label{
+  font-size:10px;color:rgba(168,212,192,0.55);
+  text-transform:uppercase;letter-spacing:0.09em;margin-bottom:5px;
+}
+.mc-balance{
+  font-family:'Playfair Display',serif;
+  font-size:38px;font-weight:700;
+  color:#fff;letter-spacing:-1px;line-height:1;margin-bottom:12px;
+}
+.mc-balance.neg{color:#f0a090}
+.mc-balance.pos{color:#a8d4c0}
+
+.stats-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.stat{background:rgba(255,255,255,0.07);border-radius:12px;padding:10px 12px;border:0.5px solid rgba(168,212,192,0.1)}
+.stat-lbl{font-size:10px;color:rgba(168,212,192,0.5);margin-bottom:3px}
+.stat-val{font-size:16px;font-weight:600}
+.stat-val.income{color:#a8d4c0}
+.stat-val.expense{color:#f0a090}
+
+/* ── SIGN UP STYLE BUTTON (PathFinders style) ── */
+.action-btn{
+  width:100%;padding:12px;
+  background:#a8d4c0;
+  color:#0f2820;font-size:14px;font-weight:600;
+  border:none;border-radius:12px;cursor:pointer;
+  font-family:'DM Sans',sans-serif;
+  transition:opacity 0.15s,transform 0.1s;
+}
+.action-btn:active{opacity:0.85;transform:scale(0.98)}
+.action-btn.dark{background:#0f2820;color:#a8d4c0}
+
+/* ── TABS ── */
+.tabs-row{
+  display:flex;gap:0;
+  margin:14px 14px 0;
+  background:rgba(15,40,32,0.12);
+  border-radius:14px;padding:3px;
+  border:0.5px solid rgba(15,40,32,0.1);
+}
+.tab{
+  flex:1;padding:9px 4px;
+  font-size:12px;font-weight:500;
+  font-family:'DM Sans',sans-serif;
+  border:none;background:transparent;
+  color:rgba(15,40,32,0.5);
+  border-radius:12px;cursor:pointer;
+  transition:all 0.18s;
+}
+.tab.active{background:#0f2820;color:#a8d4c0}
+
+/* ── CONTENT AREA ── */
+.content{padding:12px 14px 0}
+.section{display:none}.section.active{display:block}
+
+/* ── FORM (PathFinders "Welcome Back" screen style) ── */
+.form-wrap{
+  background:rgba(216,235,227,0.9);
+  border-radius:22px;
+  padding:20px 18px;
+  border:0.5px solid rgba(15,40,32,0.1);
+  backdrop-filter:blur(8px);
+}
+.form-title{
+  font-family:'Playfair Display',serif;
+  font-size:22px;font-weight:700;
+  color:#0f2820;margin-bottom:4px;
+}
+.form-sub{font-size:12px;color:rgba(15,40,32,0.45);margin-bottom:18px}
+
+.type-toggle{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px}
+.type-btn{
+  padding:10px;font-size:13px;font-weight:500;
+  border:1px solid rgba(15,40,32,0.18);
+  border-radius:10px;cursor:pointer;
+  background:rgba(255,255,255,0.5);
+  color:rgba(15,40,32,0.45);
+  transition:all 0.15s;font-family:'DM Sans',sans-serif;
+}
+.type-btn.expense.active{background:rgba(139,49,32,0.1);color:#7a2c1d;border-color:rgba(139,49,32,0.3)}
+.type-btn.income.active{background:rgba(15,110,86,0.1);color:#0f6e56;border-color:rgba(15,110,86,0.28)}
+
+.field-label{font-size:11px;color:rgba(15,40,32,0.45);margin-bottom:5px;display:block;text-transform:uppercase;letter-spacing:0.05em;font-weight:500}
+.field-group{margin-bottom:12px}
+
+input,select{
+  width:100%;padding:11px 14px;font-size:14px;
+  border:0.5px solid rgba(15,40,32,0.18);
+  border-radius:10px;
+  background:rgba(255,255,255,0.55);
+  color:#0f2820;outline:none;
+  -webkit-appearance:none;appearance:none;
+  font-family:'DM Sans',sans-serif;
+  transition:border-color 0.15s,background 0.15s;
+}
+input:focus,select:focus{
+  border-color:#0f6e56;
+  background:rgba(255,255,255,0.78);
+}
+input::placeholder{color:rgba(15,40,32,0.3)}
+
+.or-row{
+  display:flex;align-items:center;gap:10px;
+  margin:14px 0 10px;
+}
+.or-line{flex:1;height:0.5px;background:rgba(15,40,32,0.15)}
+.or-text{font-size:11px;color:rgba(15,40,32,0.35)}
+
+/* ── HISTORY ── */
+.filter-row{display:flex;gap:6px;margin-bottom:12px}
+.fchip{
+  font-size:11px;padding:5px 14px;
+  border:0.5px solid rgba(15,40,32,0.18);
+  border-radius:20px;background:transparent;
+  color:rgba(15,40,32,0.45);cursor:pointer;
+  font-family:'DM Sans',sans-serif;transition:all 0.15s;
+}
+.fchip.active{background:#0f2820;color:#a8d4c0;border-color:#0f2820}
+
+.tx-list{display:flex;flex-direction:column;gap:6px}
+.tx{
+  display:flex;align-items:center;gap:10px;
+  padding:11px 14px;
+  background:rgba(216,235,227,0.85);
+  border:0.5px solid rgba(15,40,32,0.1);
+  border-radius:14px;backdrop-filter:blur(6px);
+}
+.tx-ico{
+  font-size:18px;width:38px;height:38px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(15,40,32,0.07);flex-shrink:0;
+}
+.tx-inf{flex:1;min-width:0}
+.tx-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#0f2820}
+.tx-meta{font-size:10px;color:rgba(15,40,32,0.45);margin-top:2px}
+.tx-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
+.tx-amt{font-size:13px;font-weight:600}
+.tx-amt.income{color:#0f6e56}.tx-amt.expense{color:#8b3120}
+.tx-del{background:none;border:none;color:rgba(15,40,32,0.25);cursor:pointer;font-size:13px;padding:0;line-height:1}
+.tx-del:active{color:#8b3120}
+
+/* ── STATS ── */
+.stat-block{
+  background:rgba(216,235,227,0.88);
+  border-radius:18px;padding:16px 18px;
+  border:0.5px solid rgba(15,40,32,0.1);
+  margin-bottom:10px;
+}
+.sb-title{font-size:10px;font-weight:500;color:rgba(15,40,32,0.4);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:14px}
+.cat-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.cat-row:last-child{margin-bottom:0}
+.cat-ico{font-size:14px;width:22px;text-align:center;flex-shrink:0}
+.cat-name{font-size:12px;font-weight:500;width:74px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#0f2820}
+.cat-bar-bg{flex:1;height:5px;background:rgba(15,40,32,0.1);border-radius:3px;overflow:hidden}
+.cat-bar{height:100%;border-radius:3px;transition:width 0.4s ease}
+.cat-amt{font-size:11px;color:rgba(15,40,32,0.4);min-width:60px;text-align:right;flex-shrink:0}
+
+/* ── EMPTY ── */
+.empty{text-align:center;padding:40px 0;color:rgba(15,40,32,0.35)}
+.empty-ico{font-size:30px;margin-bottom:10px}
+.empty-txt{font-size:13px}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;bottom:96px;left:50%;
+  transform:translateX(-50%) translateY(60px);
+  background:#0f2820;color:#a8d4c0;
+  padding:10px 22px;border-radius:20px;
+  font-size:12px;font-weight:500;
+  transition:transform 0.25s ease;
+  z-index:200;white-space:nowrap;pointer-events:none;
+}
+.toast.show{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-sky"></div>
+  <svg class="hero-svg" viewBox="0 0 390 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+    <!-- back range -->
+    <polygon points="0,200 0,140 50,90 100,120 160,55 220,95 280,40 340,75 390,50 390,200" fill="#3a6b5a" opacity="0.6"/>
+    <!-- mid range -->
+    <polygon points="0,200 0,155 40,110 90,138 150,72 210,108 265,55 325,88 390,62 390,200" fill="#1e4a38" opacity="0.75"/>
+    <!-- front range -->
+    <polygon points="0,200 0,165 60,125 110,150 175,95 235,128 295,78 355,108 390,88 390,200" fill="#0f2820"/>
+  </svg>
+  <div class="hero-fog"></div>
+  <div class="hero-fade"></div>
+  <div class="hero-brand">
+    <div class="hero-brand-small">Личные финансы</div>
+    <div class="hero-brand-big">МОЙ <span>БЮДЖЕТ</span></div>
+  </div>
+</div>
+
+<!-- BALANCE CARD -->
+<div class="main-card">
+  <div class="mc-label">Текущий баланс</div>
+  <div class="mc-balance" id="balance-display">0 ₽</div>
+  <div class="stats-row">
+    <div class="stat">
+      <div class="stat-lbl">Доходы</div>
+      <div class="stat-val income" id="total-income">0 ₽</div>
+    </div>
+    <div class="stat">
+      <div class="stat-lbl">Расходы</div>
+      <div class="stat-val expense" id="total-expense">0 ₽</div>
+    </div>
+  </div>
+  <div id="month-label" style="font-size:11px;color:rgba(168,212,192,0.4);text-align:center"></div>
+</div>
+
+<!-- TABS -->
+<div class="tabs-row">
+  <button class="tab active" data-tab="add">Добавить</button>
+  <button class="tab" data-tab="history">История</button>
+  <button class="tab" data-tab="stats">Статистика</button>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+
+  <!-- ADD -->
+  <div class="section active" id="tab-add">
+    <div class="form-wrap">
+      <div class="form-title">Новая запись</div>
+      <div class="form-sub">Добавьте доход или расход</div>
+
+      <div class="type-toggle">
+        <button class="type-btn expense active" id="btn-expense">— Расход</button>
+        <button class="type-btn income" id="btn-income">+ Доход</button>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Сумма (₽)</label>
+        <input type="number" id="inp-amount" placeholder="0.00" min="0" inputmode="decimal"/>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Название</label>
+        <input type="text" id="inp-name" placeholder="Например: Продукты" maxlength="50"/>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Категория</label>
+        <select id="inp-cat"></select>
+      </div>
+
+      <button class="action-btn dark" id="add-btn">Добавить запись</button>
+
+      <div class="or-row">
+        <div class="or-line"></div>
+        <div class="or-text">или</div>
+        <div class="or-line"></div>
+      </div>
+      <div style="font-size:12px;color:rgba(15,40,32,0.4);text-align:center">
+        Перейдите в <span style="color:#0f6e56;font-weight:500;cursor:pointer" onclick="switchTo('history')">Историю</span> для управления записями
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="section" id="tab-history">
+    <div class="filter-row">
+      <button class="fchip active" data-filter="all">Все</button>
+      <button class="fchip" data-filter="income">Доходы</button>
+      <button class="fchip" data-filter="expense">Расходы</button>
+    </div>
+    <div class="tx-list" id="tx-list"></div>
+  </div>
+
+  <!-- STATS -->
+  <div class="section" id="tab-stats">
+    <div id="stats-content"></div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const tg=window.Telegram&&window.Telegram.WebApp;
+if(tg){tg.ready();tg.expand()}
+
+const CATS={
+  expense:['Продукты','Транспорт','Кафе','Развлечения','Одежда','Здоровье','Жильё','Связь','Образование','Другое'],
+  income:['Зарплата','Фриланс','Подарок','Инвестиции','Продажа','Другое']
+};
+const ICONS={'Продукты':'🛒','Транспорт':'🚌','Кафе':'☕','Развлечения':'🎮','Одежда':'👕','Здоровье':'💊','Жильё':'🏠','Связь':'📱','Образование':'📚','Зарплата':'💼','Фриланс':'💻','Подарок':'🎁','Инвестиции':'📈','Продажа':'🏷️','Другое':'📌'};
+const BARS=['#0f6e56','#1D9E75','#378ADD','#854F0B','#993556','#534AB7','#3B6D11'];
+
+let cType='expense',cFilter='all';
+
+function getData(){return JSON.parse(localStorage.getItem('bgt_pf')||'[]')}
+function saveData(d){localStorage.setItem('bgt_pf',JSON.stringify(d))}
+function fmt(n){return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n))+' ₽'}
+
+function showToast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),2000);
+}
+
+const months=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const now=new Date();
+document.getElementById('month-label').textContent=months[now.getMonth()]+' '+now.getFullYear();
+
+function fillCats(){
+  const sel=document.getElementById('inp-cat');
+  sel.innerHTML=CATS[cType].map(c=>`<option>${c}</option>`).join('');
+}
+
+function setType(t){
+  cType=t;
+  document.getElementById('btn-expense').classList.toggle('active',t==='expense');
+  document.getElementById('btn-income').classList.toggle('active',t==='income');
+  fillCats();
+}
+document.getElementById('btn-expense').onclick=()=>setType('expense');
+document.getElementById('btn-income').onclick=()=>setType('income');
+
+document.getElementById('add-btn').onclick=()=>{
+  const amount=parseFloat(document.getElementById('inp-amount').value);
+  const name=document.getElementById('inp-name').value.trim();
+  const cat=document.getElementById('inp-cat').value;
+  if(!amount||amount<=0){showToast('Введите сумму');return}
+  if(!name){showToast('Введите название');return}
+  const tx={id:Date.now(),type:cType,amount,name,cat,
+    date:now.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'2-digit'})};
+  const data=getData();data.unshift(tx);saveData(data);
+  document.getElementById('inp-amount').value='';
+  document.getElementById('inp-name').value='';
+  updateAll();
+  showToast(cType==='income'?'Доход добавлен ✓':'Расход добавлен ✓');
+  if(tg&&tg.HapticFeedback)tg.HapticFeedback.impactOccurred('light');
+};
+
+function switchTo(tab){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
+  document.getElementById('tab-'+tab).classList.add('active');
+  if(tab==='history')renderHistory();
+  if(tab==='stats')renderStats();
+}
+
+document.querySelectorAll('.tab').forEach(btn=>{
+  btn.onclick=()=>switchTo(btn.dataset.tab);
+});
+
+document.querySelectorAll('.fchip').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.fchip').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');cFilter=btn.dataset.filter;renderHistory();
+  };
+});
+
+function updateSummary(){
+  const data=getData();
+  const income=data.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const expense=data.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const bal=income-expense;
+  const bd=document.getElementById('balance-display');
+  bd.textContent=fmt(bal);
+  bd.className='mc-balance'+(bal<0?' neg':bal>0?' pos':'');
+  document.getElementById('total-income').textContent=fmt(income);
+  document.getElementById('total-expense').textContent=fmt(expense);
+}
+
+function renderHistory(){
+  const data=getData().filter(t=>cFilter==='all'||t.type===cFilter);
+  const list=document.getElementById('tx-list');
+  if(!data.length){
+    list.innerHTML='<div class="empty"><div class="empty-ico">🗒️</div><div class="empty-txt">Записей пока нет</div></div>';
+    return;
+  }
+  list.innerHTML=data.map(t=>`
+    <div class="tx">
+      <div class="tx-ico">${ICONS[t.cat]||'📌'}</div>
+      <div class="tx-inf">
+        <div class="tx-name">${t.name}</div>
+        <div class="tx-meta">${t.cat} · ${t.date}</div>
+      </div>
+      <div class="tx-right">
+        <div class="tx-amt ${t.type}">${t.type==='income'?'+':'−'}${fmt(t.amount)}</div>
+        <button class="tx-del" data-id="${t.id}">✕</button>
+      </div>
+    </div>
+  `).join('');
+  list.querySelectorAll('.tx-del').forEach(b=>{
+    b.onclick=()=>{
+      saveData(getData().filter(t=>t.id!==parseInt(b.dataset.id)));
+      updateAll();showToast('Запись удалена');
+    };
+  });
+}
+
+function renderStats(){
+  const data=getData().filter(t=>t.type==='expense');
+  const c=document.getElementById('stats-content');
+  if(!data.length){
+    c.innerHTML='<div class="empty"><div class="empty-ico">📊</div><div class="empty-txt">Нет расходов для анализа</div></div>';
+    return;
+  }
+  const byCat={};
+  data.forEach(t=>{byCat[t.cat]=(byCat[t.cat]||0)+t.amount});
+  const sorted=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
+  const max=sorted[0][1];
+  const total=sorted.reduce((s,[,v])=>s+v,0);
+  c.innerHTML=`
+    <div class="stat-block">
+      <div class="sb-title">Расходы по категориям</div>
+      ${sorted.map(([cat,amt],i)=>`
+        <div class="cat-row">
+          <div class="cat-ico">${ICONS[cat]||'📌'}</div>
+          <div class="cat-name">${cat}</div>
+          <div class="cat-bar-bg"><div class="cat-bar" style="width:${Math.round(amt/max*100)}%;background:${BARS[i%BARS.length]}"></div></div>
+          <div class="cat-amt">${fmt(amt)}</div>
+        </div>
+      `).join('')}
+    </div>
+    <div class="stat-block">
+      <div class="sb-title">Итого расходов</div>
+      <div style="font-family:'Playfair Display',serif;font-size:26px;font-weight:700;color:#8b3120">${fmt(total)}</div>
+    </div>
+  `;
+}
+
+function updateAll(){updateSummary();renderHistory();renderStats()}
+fillCats();updateAll();
+</script>
+</body>
+</html>
