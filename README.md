@@ -1,46 +1,62 @@
-<!-- HERO -->
-<p align="center">
-  <img src="https://capsule-render.vercel.app/api?type=smooth&color=0:0f172a,100:16a34a&height=180&section=header&text=Budget%20App&fontSize=36&fontColor=ffffff&animation=fadeIn" />
-</p>
+<div align="center">
 
-<p align="center">
-  <b>Clarity. Control. Money.</b>
-</p>
+<img src="./assets/cover.png" alt="FinTrack MX Cover" width="100%" />
 
-<p align="center">
-  <a href="https://maxmudovo22.github.io/budget-app/">Open App</a>
-</p>
+# FinTrack MX
+
+### Personal Budget Assistant for Telegram Mini App
+
+A clean, fast and smart digital assistant for tracking income, expenses and personal financial discipline.
+
+<br/>
+
+[![Live Demo](https://img.shields.io/badge/Live-Demo-111111?style=for-the-badge&logo=githubpages&logoColor=white)](https://maxmudovo22.github.io/budget-app/)
+[![Telegram Bot](https://img.shields.io/badge/Telegram-Bot-229ED9?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/fintrackmxbot)
+[![Made with](https://img.shields.io/badge/Made%20with-Gemini_AI-ffffff?style=for-the-badge&logo=google&logoColor=black)](#)
+
+</div>
 
 ---
 
 ## Overview
 
-Minimal personal finance tracker.  
-Fast. Clean. Focused.
+**FinTrack MX** is a digital budget assistant designed to help users manage personal finances directly inside Telegram.
+
+The project focuses on simplicity, clean interface and fast access to core financial actions: adding expenses, tracking income, viewing balance and understanding spending behavior.
 
 ---
 
-## Core
+## Preview
 
-- Track income & expenses  
-- Real-time balance  
-- Smart categorization  
+<div align="center">
 
----
+<img src="./assets/preview.png" alt="App Preview" width="85%" />
 
-## Experience
-
-Designed for simplicity.  
-Built for control.
+</div>
 
 ---
 
-## Tech
+## Key Features
 
-React · JavaScript · LocalStorage  
+| Feature | Description |
+|---|---|
+| Expense Tracking | Add and control daily spending |
+| Income Tracking | Save income records and calculate total balance |
+| Budget Overview | View financial summary in a clean dashboard |
+| Telegram Mini App | Works directly inside Telegram |
+| Simple UI | Minimal, modern and mobile-friendly interface |
+| AI-ready Structure | Can be extended with Gemini AI features |
 
 ---
 
-<p align="center">
-  <i>Own your money.</i>
-</p>
+## Project Architecture
+
+```mermaid
+flowchart TD
+    A[User] --> B[Telegram Bot]
+    B --> C[Telegram Mini App]
+    C --> D[Budget Interface]
+    D --> E[Income & Expense Data]
+    E --> F[Analytics / Summary]
+    F --> G[Better Financial Decisions]
+
