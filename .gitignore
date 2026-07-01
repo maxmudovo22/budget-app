@@ -1,0 +1,4 @@
+webhook.php
+preview.html
+*.sqlite
+.env

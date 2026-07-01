@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
+<title>Мой бюджет</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+/* ── DESIGN TOKENS ── */
+:root{
+  --bg:#dde8e4;
+  --surface:#ffffff;
+  --surface-2:#f2f8f5;
+  --primary:#1a5e44;
+  --accent:#5fb898;
+  --text-1:#0d2218;
+  --text-2:#3d6050;
+  --text-3:#8aada0;
+  --income:#168a56;
+  --income-bg:#e5f7ee;
+  --expense:#c53030;
+  --expense-bg:#fde8e8;
+
+  /* Clay shadow system */
+  --clay-lg:8px 14px 32px rgba(0,55,32,0.14),-5px -5px 16px rgba(255,255,255,0.94);
+  --clay-md:5px 8px 18px rgba(0,55,32,0.11),-3px -3px 10px rgba(255,255,255,0.90);
+  --clay-sm:3px 4px 10px rgba(0,55,32,0.09),-2px -2px 6px rgba(255,255,255,0.86);
+  --clay-in:inset 3px 3px 8px rgba(0,55,32,0.10),inset -2px -2px 6px rgba(255,255,255,0.84);
+}
+
+/* ── BASE ── */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{
+  font-family:'DM Sans',sans-serif;
+  min-height:100dvh;
+  background:var(--bg);
+  overflow-x:hidden;
+  padding-bottom:36px;
+}
+
+/* ── HERO ── */
+.hero{
+  position:relative;
+  width:100%;height:240px;
+  overflow:hidden;flex-shrink:0;
+}
+.hero-sky{
+  position:absolute;inset:0;
+  background:linear-gradient(180deg,#b2ccc4 0%,#8bb8a8 45%,#699d8e 100%);
+}
+.hero-svg{position:absolute;bottom:0;left:0;width:100%;height:175px}
+.hero-fog{
+  position:absolute;bottom:52px;left:0;right:0;height:48px;
+  background:linear-gradient(180deg,rgba(195,220,212,0) 0%,rgba(195,220,212,0.40) 60%,rgba(195,220,212,0) 100%);
+}
+.hero-fade{
+  position:absolute;bottom:0;left:0;right:0;height:115px;
+  background:linear-gradient(180deg,transparent 0%,var(--bg) 100%);
+}
+.hero-brand{position:absolute;top:26px;left:20px}
+.hero-brand-small{
+  font-size:9px;color:rgba(13,34,24,0.50);
+  letter-spacing:0.10em;text-transform:uppercase;
+  margin-bottom:3px;font-weight:600;
+}
+.hero-brand-big{
+  font-family:'Playfair Display',serif;
+  font-size:23px;font-weight:700;line-height:1;
+  color:var(--text-1);
+}
+.hero-brand-big span{color:var(--primary)}
+
+/* ── BALANCE CARD ── */
+.main-card{
+  margin:0 16px;
+  background:var(--surface);
+  border-radius:28px;
+  padding:22px 20px 20px;
+  position:relative;z-index:2;
+  margin-top:-54px;
+  box-shadow:var(--clay-lg);
+}
+.mc-label{
+  font-size:10px;color:var(--text-3);
+  text-transform:uppercase;letter-spacing:0.10em;
+  margin-bottom:6px;font-weight:600;
+}
+.mc-balance{
+  font-family:'Playfair Display',serif;
+  font-size:42px;font-weight:700;
+  color:var(--text-1);
+  letter-spacing:-1.5px;line-height:1;
+  margin-bottom:18px;
+  font-variant-numeric:tabular-nums;
+}
+.mc-balance.neg{color:var(--expense)}
+.mc-balance.pos{color:var(--income)}
+
+.stats-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
+.stat{
+  background:var(--surface-2);
+  border-radius:18px;padding:12px 14px;
+  box-shadow:var(--clay-sm);
+}
+.stat-lbl{
+  font-size:9px;color:var(--text-3);
+  margin-bottom:4px;font-weight:600;
+  letter-spacing:0.08em;text-transform:uppercase;
+}
+.stat-val{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
+.stat-val.income{color:var(--income)}
+.stat-val.expense{color:var(--expense)}
+
+#month-label{font-size:11px;color:var(--text-3);text-align:center;font-weight:500}
+
+/* ── PRIMARY BUTTON ── */
+.action-btn{
+  width:100%;padding:14px;
+  background:var(--primary);
+  color:#fff;font-size:14px;font-weight:600;
+  border:none;border-radius:16px;cursor:pointer;
+  font-family:'DM Sans',sans-serif;
+  box-shadow:5px 7px 20px rgba(26,94,68,0.32),
+             -2px -2px 8px rgba(255,255,255,0.45);
+  transition:transform 0.12s ease,box-shadow 0.12s ease;
+  touch-action:manipulation;
+}
+.action-btn:active{
+  transform:scale(0.97);
+  box-shadow:2px 3px 10px rgba(26,94,68,0.20);
+}
+
+/* ── TABS ── */
+.tabs-row{
+  display:flex;
+  margin:18px 16px 0;
+  background:rgba(0,0,0,0.07);
+  border-radius:18px;padding:4px;
+  gap:0;
+}
+.tab{
+  flex:1;padding:9px 6px;
+  font-size:12px;font-weight:500;
+  font-family:'DM Sans',sans-serif;
+  border:none;background:transparent;
+  color:var(--text-3);
+  border-radius:14px;cursor:pointer;
+  transition:all 0.20s ease;
+  touch-action:manipulation;
+}
+.tab.active{
+  background:var(--surface);
+  color:var(--primary);
+  font-weight:700;
+  box-shadow:var(--clay-sm);
+}
+
+/* ── CONTENT ── */
+.content{padding:14px 16px 0}
+.section{display:none}.section.active{display:block}
+
+/* ── ADD FORM ── */
+.form-wrap{
+  background:var(--surface);
+  border-radius:26px;
+  padding:22px 20px;
+  box-shadow:var(--clay-lg);
+}
+.form-title{
+  font-family:'Playfair Display',serif;
+  font-size:22px;font-weight:700;
+  color:var(--text-1);margin-bottom:3px;
+}
+.form-sub{font-size:12px;color:var(--text-3);margin-bottom:20px;font-weight:500}
+
+.type-toggle{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px}
+.type-btn{
+  padding:12px;font-size:13px;font-weight:600;
+  border:none;
+  border-radius:14px;cursor:pointer;
+  background:var(--surface-2);
+  color:var(--text-3);
+  transition:all 0.18s ease;
+  font-family:'DM Sans',sans-serif;
+  box-shadow:var(--clay-sm);
+  touch-action:manipulation;
+}
+.type-btn.expense.active{
+  background:var(--expense-bg);
+  color:var(--expense);
+  box-shadow:var(--clay-md);
+}
+.type-btn.income.active{
+  background:var(--income-bg);
+  color:var(--income);
+  box-shadow:var(--clay-md);
+}
+
+.field-label{
+  font-size:9px;color:var(--text-3);
+  margin-bottom:6px;display:block;
+  text-transform:uppercase;letter-spacing:0.09em;font-weight:700;
+}
+.field-group{margin-bottom:14px}
+
+input,select{
+  width:100%;padding:13px 15px;font-size:15px;
+  border:none;border-radius:14px;
+  background:var(--surface-2);
+  color:var(--text-1);outline:none;
+  -webkit-appearance:none;appearance:none;
+  font-family:'DM Sans',sans-serif;
+  box-shadow:var(--clay-in);
+  transition:box-shadow 0.18s;
+}
+input:focus,select:focus{
+  box-shadow:var(--clay-in),0 0 0 2.5px rgba(95,184,152,0.40);
+}
+input::placeholder{color:var(--text-3);font-weight:400}
+
+.or-row{
+  display:flex;align-items:center;gap:10px;
+  margin:16px 0 12px;
+}
+.or-line{flex:1;height:1px;background:rgba(0,0,0,0.07)}
+.or-text{font-size:11px;color:var(--text-3);font-weight:500}
+
+/* ── HISTORY ── */
+.filter-row{display:flex;gap:7px;margin-bottom:14px}
+.fchip{
+  font-size:11px;padding:7px 16px;
+  border:none;border-radius:20px;
+  background:var(--surface);
+  color:var(--text-2);cursor:pointer;
+  font-family:'DM Sans',sans-serif;
+  transition:all 0.18s ease;
+  box-shadow:var(--clay-sm);
+  font-weight:600;
+  touch-action:manipulation;
+}
+.fchip.active{
+  background:var(--primary);
+  color:#fff;
+  box-shadow:4px 5px 14px rgba(26,94,68,0.28),
+             -2px -2px 7px rgba(255,255,255,0.38);
+}
+
+.tx-list{display:flex;flex-direction:column;gap:9px}
+.tx{
+  display:flex;align-items:center;gap:12px;
+  padding:14px 16px;
+  background:var(--surface);
+  border-radius:20px;
+  box-shadow:var(--clay-md);
+}
+.tx-ico{
+  font-size:18px;
+  width:42px;height:42px;
+  border-radius:14px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--surface-2);flex-shrink:0;
+  box-shadow:var(--clay-sm);
+}
+.tx-inf{flex:1;min-width:0}
+.tx-name{
+  font-size:13px;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  color:var(--text-1);
+}
+.tx-meta{font-size:11px;color:var(--text-3);margin-top:2px;font-weight:500}
+.tx-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
+.tx-amt{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+.tx-amt.income{color:var(--income)}
+.tx-amt.expense{color:var(--expense)}
+.tx-del{
+  background:none;border:none;
+  color:var(--text-3);cursor:pointer;
+  font-size:13px;padding:0;line-height:1;
+  touch-action:manipulation;
+}
+.tx-del:active{color:var(--expense)}
+
+/* ── STATS ── */
+.stat-block{
+  background:var(--surface);
+  border-radius:22px;
+  padding:18px 20px;
+  box-shadow:var(--clay-md);
+  margin-bottom:12px;
+}
+.sb-title{
+  font-size:9px;font-weight:700;color:var(--text-3);
+  text-transform:uppercase;letter-spacing:0.09em;margin-bottom:16px;
+}
+.cat-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.cat-row:last-child{margin-bottom:0}
+.cat-ico{font-size:14px;width:22px;text-align:center;flex-shrink:0}
+.cat-name{
+  font-size:12px;font-weight:600;
+  width:72px;flex-shrink:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  color:var(--text-1);
+}
+.cat-bar-bg{
+  flex:1;height:6px;
+  background:rgba(0,0,0,0.06);
+  border-radius:6px;overflow:hidden;
+}
+.cat-bar{
+  height:100%;border-radius:6px;
+  transition:width 0.45s cubic-bezier(0.34,1.56,0.64,1);
+}
+.cat-amt{
+  font-size:11px;color:var(--text-2);
+  min-width:60px;text-align:right;flex-shrink:0;
+  font-variant-numeric:tabular-nums;font-weight:500;
+}
+
+/* ── EMPTY ── */
+.empty{text-align:center;padding:44px 0;color:var(--text-3)}
+.empty-ico{font-size:34px;margin-bottom:10px}
+.empty-txt{font-size:13px;font-weight:600}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;bottom:28px;left:50%;
+  transform:translateX(-50%) translateY(80px);
+  background:var(--text-1);color:#a8d4c0;
+  padding:11px 24px;border-radius:24px;
+  font-size:12px;font-weight:700;
+  box-shadow:var(--clay-md);
+  transition:transform 0.30s cubic-bezier(0.34,1.56,0.64,1);
+  z-index:200;white-space:nowrap;pointer-events:none;
+  letter-spacing:0.01em;
+}
+.toast.show{transform:translateX(-50%) translateY(0)}
+
+/* ── REDUCED MOTION ── */
+@media (prefers-reduced-motion:reduce){
+  .action-btn,.tab,.fchip,.type-btn,.cat-bar,.toast{transition:none}
+  .action-btn:active{transform:none}
+}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-sky"></div>
+  <svg class="hero-svg" viewBox="0 0 390 175" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+    <polygon points="0,175 0,115 50,75 100,102 160,42 220,80 280,26 340,60 390,38 390,175" fill="#7eb5a2" opacity="0.48"/>
+    <polygon points="0,175 0,132 40,96 90,118 150,60 210,95 265,44 325,74 390,52 390,175" fill="#4a9278" opacity="0.62"/>
+    <polygon points="0,175 0,144 60,108 110,132 175,82 235,114 295,66 355,96 390,76 390,175" fill="#2a6e52"/>
+  </svg>
+  <div class="hero-fog"></div>
+  <div class="hero-fade"></div>
+  <div class="hero-brand">
+    <div class="hero-brand-small">Личные финансы</div>
+    <div class="hero-brand-big">МОЙ <span>БЮДЖЕТ</span></div>
+  </div>
+</div>
+
+<!-- BALANCE CARD -->
+<div class="main-card">
+  <div class="mc-label">Текущий баланс</div>
+  <div class="mc-balance" id="balance-display">0 ₽</div>
+  <div class="stats-row">
+    <div class="stat">
+      <div class="stat-lbl">Доходы</div>
+      <div class="stat-val income" id="total-income">0 ₽</div>
+    </div>
+    <div class="stat">
+      <div class="stat-lbl">Расходы</div>
+      <div class="stat-val expense" id="total-expense">0 ₽</div>
+    </div>
+  </div>
+  <div id="month-label"></div>
+</div>
+
+<!-- TABS -->
+<div class="tabs-row">
+  <button class="tab active" data-tab="add">Добавить</button>
+  <button class="tab" data-tab="history">История</button>
+  <button class="tab" data-tab="stats">Статистика</button>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+
+  <!-- ADD -->
+  <div class="section active" id="tab-add">
+    <div class="form-wrap">
+      <div class="form-title">Новая запись</div>
+      <div class="form-sub">Добавьте доход или расход</div>
+
+      <div class="type-toggle">
+        <button class="type-btn expense active" id="btn-expense">— Расход</button>
+        <button class="type-btn income" id="btn-income">+ Доход</button>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Сумма (сум)</label>
+        <input type="number" id="inp-amount" placeholder="0.00" min="0" inputmode="decimal"/>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Название</label>
+        <input type="text" id="inp-name" placeholder="Например: Продукты" maxlength="50"/>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Категория</label>
+        <select id="inp-cat"></select>
+      </div>
+
+      <button class="action-btn" id="add-btn">Добавить запись</button>
+
+      <div class="or-row">
+        <div class="or-line"></div>
+        <div class="or-text">или</div>
+        <div class="or-line"></div>
+      </div>
+      <div style="font-size:12px;color:var(--text-3);text-align:center;font-weight:500">
+        Перейдите в <span style="color:var(--primary);font-weight:700;cursor:pointer" onclick="switchTo('history')">Историю</span> для управления записями
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="section" id="tab-history">
+    <div class="filter-row">
+      <button class="fchip active" data-filter="all">Все</button>
+      <button class="fchip" data-filter="income">Доходы</button>
+      <button class="fchip" data-filter="expense">Расходы</button>
+    </div>
+    <div class="tx-list" id="tx-list"></div>
+  </div>
+
+  <!-- STATS -->
+  <div class="section" id="tab-stats">
+    <div id="stats-content"></div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const tg=window.Telegram&&window.Telegram.WebApp;
+if(tg){tg.ready();tg.expand()}
+
+const CATS={
+  expense:['Продукты','Транспорт','Кафе','Развлечения','Одежда','Здоровье','Жильё','Связь','Образование','Другое'],
+  income:['Зарплата','Фриланс','Подарок','Инвестиции','Продажа','Другое']
+};
+const ICONS={'Продукты':'🛒','Транспорт':'🚌','Кафе':'☕','Развлечения':'🎮','Одежда':'👕','Здоровье':'💊','Жильё':'🏠','Связь':'📱','Образование':'📚','Зарплата':'💼','Фриланс':'💻','Подарок':'🎁','Инвестиции':'📈','Продажа':'🏷️','Другое':'📌'};
+const BARS=['#2a7d5a','#3da678','#5bbf96','#e08030','#d45040','#7060c0','#3070b0'];
+
+let cType='expense',cFilter='all';
+
+function getData(){return JSON.parse(localStorage.getItem('bgt_pf')||'[]')}
+function saveData(d){localStorage.setItem('bgt_pf',JSON.stringify(d))}
+function fmt(n){return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n))+' сум'}
+
+function showToast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),2200);
+}
+
+const months=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const now=new Date();
+document.getElementById('month-label').textContent=months[now.getMonth()]+' '+now.getFullYear();
+
+function fillCats(){
+  const sel=document.getElementById('inp-cat');
+  sel.innerHTML=CATS[cType].map(c=>`<option>${c}</option>`).join('');
+}
+
+function setType(t){
+  cType=t;
+  document.getElementById('btn-expense').classList.toggle('active',t==='expense');
+  document.getElementById('btn-income').classList.toggle('active',t==='income');
+  fillCats();
+}
+document.getElementById('btn-expense').onclick=()=>setType('expense');
+document.getElementById('btn-income').onclick=()=>setType('income');
+
+document.getElementById('add-btn').onclick=()=>{
+  const amount=parseFloat(document.getElementById('inp-amount').value);
+  const name=document.getElementById('inp-name').value.trim();
+  const cat=document.getElementById('inp-cat').value;
+  if(!amount||amount<=0){showToast('Введите сумму');return}
+  if(!name){showToast('Введите название');return}
+  const tx={id:Date.now(),type:cType,amount,name,cat,
+    date:now.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'2-digit'})};
+  const data=getData();data.unshift(tx);saveData(data);
+  document.getElementById('inp-amount').value='';
+  document.getElementById('inp-name').value='';
+  updateAll();
+  showToast(cType==='income'?'Доход добавлен ✓':'Расход добавлен ✓');
+  if(tg&&tg.HapticFeedback)tg.HapticFeedback.impactOccurred('light');
+};
+
+function switchTo(tab){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
+  document.getElementById('tab-'+tab).classList.add('active');
+  if(tab==='history')renderHistory();
+  if(tab==='stats')renderStats();
+}
+
+document.querySelectorAll('.tab').forEach(btn=>{
+  btn.onclick=()=>switchTo(btn.dataset.tab);
+});
+
+document.querySelectorAll('.fchip').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.fchip').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');cFilter=btn.dataset.filter;renderHistory();
+  };
+});
+
+function updateSummary(){
+  const data=getData();
+  const income=data.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const expense=data.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const bal=income-expense;
+  const bd=document.getElementById('balance-display');
+  bd.textContent=fmt(bal);
+  bd.className='mc-balance'+(bal<0?' neg':bal>0?' pos':'');
+  document.getElementById('total-income').textContent=fmt(income);
+  document.getElementById('total-expense').textContent=fmt(expense);
+}
+
+function renderHistory(){
+  const data=getData().filter(t=>cFilter==='all'||t.type===cFilter);
+  const list=document.getElementById('tx-list');
+  if(!data.length){
+    list.innerHTML='<div class="empty"><div class="empty-ico">🗒️</div><div class="empty-txt">Записей пока нет</div></div>';
+    return;
+  }
+  list.innerHTML=data.map(t=>`
+    <div class="tx">
+      <div class="tx-ico">${ICONS[t.cat]||'📌'}</div>
+      <div class="tx-inf">
+        <div class="tx-name">${t.name}</div>
+        <div class="tx-meta">${t.cat} · ${t.date}</div>
+      </div>
+      <div class="tx-right">
+        <div class="tx-amt ${t.type}">${t.type==='income'?'+':'−'}${fmt(t.amount)}</div>
+        <button class="tx-del" data-id="${t.id}" aria-label="Удалить">✕</button>
+      </div>
+    </div>
+  `).join('');
+  list.querySelectorAll('.tx-del').forEach(b=>{
+    b.onclick=()=>{
+      saveData(getData().filter(t=>t.id!==parseInt(b.dataset.id)));
+      updateAll();showToast('Запись удалена');
+    };
+  });
+}
+
+function renderStats(){
+  const data=getData().filter(t=>t.type==='expense');
+  const c=document.getElementById('stats-content');
+  if(!data.length){
+    c.innerHTML='<div class="empty"><div class="empty-ico">📊</div><div class="empty-txt">Нет расходов для анализа</div></div>';
+    return;
+  }
+  const byCat={};
+  data.forEach(t=>{byCat[t.cat]=(byCat[t.cat]||0)+t.amount});
+  const sorted=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
+  const max=sorted[0][1];
+  const total=sorted.reduce((s,[,v])=>s+v,0);
+  c.innerHTML=`
+    <div class="stat-block">
+      <div class="sb-title">Расходы по категориям</div>
+      ${sorted.map(([cat,amt],i)=>`
+        <div class="cat-row">
+          <div class="cat-ico">${ICONS[cat]||'📌'}</div>
+          <div class="cat-name">${cat}</div>
+          <div class="cat-bar-bg"><div class="cat-bar" style="width:${Math.round(amt/max*100)}%;background:${BARS[i%BARS.length]}"></div></div>
+          <div class="cat-amt">${fmt(amt)}</div>
+        </div>
+      `).join('')}
+    </div>
+    <div class="stat-block">
+      <div class="sb-title">Итого расходов</div>
+      <div style="font-family:'Playfair Display',serif;font-size:30px;font-weight:700;color:var(--expense);font-variant-numeric:tabular-nums">${fmt(total)}</div>
+    </div>
+  `;
+}
+
+function updateAll(){updateSummary();renderHistory();renderStats()}
+fillCats();updateAll();
+</script>
+</body>
+</html>
