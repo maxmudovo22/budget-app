@@ -445,8 +445,15 @@ input::placeholder{color:var(--text-3);font-weight:400}
 <div class="toast" id="toast"></div>
 
 <script>
+/* ── SUPABASE CONFIG ── */
+const SB_URL='https://whxknusmkoodoctgzaqo.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndoeGtudXNta29vZG9jdGd6YXFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjE5ODYsImV4cCI6MjA5ODQ5Nzk4Nn0.ku_ExJaqYYtKoF4ub49WjB5NBhsUBqnvJ1VvcCW3IY4';
+
 const tg=window.Telegram&&window.Telegram.WebApp;
 if(tg){tg.ready();tg.expand()}
+
+const tgUser=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user;
+const USER_ID=tgUser?tgUser.id:0;
 
 const CATS={
   expense:['Продукты','Транспорт','Кафе','Развлечения','Одежда','Здоровье','Жильё','Связь','Образование','Другое'],
@@ -457,8 +464,50 @@ const BARS=['#2a7d5a','#3da678','#5bbf96','#e08030','#d45040','#7060c0','#3070b0
 
 let cType='expense',cFilter='all';
 
-function getData(){return JSON.parse(localStorage.getItem('bgt_pf')||'[]')}
-function saveData(d){localStorage.setItem('bgt_pf',JSON.stringify(d))}
+/* ── SUPABASE HELPERS ── */
+async function sbReq(path,opts={}){
+  const res=await fetch(SB_URL+path,{
+    headers:{
+      'apikey':SB_KEY,
+      'Authorization':'Bearer '+SB_KEY,
+      'Content-Type':'application/json',
+      'Prefer':'return=representation',
+      ...(opts.headers||{})
+    },
+    ...opts
+  });
+  if(!res.ok)throw new Error('SB '+res.status);
+  const text=await res.text();
+  return text?JSON.parse(text):[];
+}
+
+async function getData(){
+  if(!USER_ID)return[];
+  try{
+    const rows=await sbReq(`/rest/v1/transactions?user_id=eq.${USER_ID}&order=created_at.desc`);
+    return rows.map(r=>({
+      id:r.id,
+      type:r.type,
+      amount:parseFloat(r.amount),
+      name:r.name,
+      cat:r.category,
+      date:new Date(r.created_at).toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'2-digit'})
+    }));
+  }catch(e){console.error(e);return[];}
+}
+
+async function addTx(tx){
+  await sbReq('/rest/v1/transactions',{
+    method:'POST',
+    body:JSON.stringify({user_id:USER_ID,type:tx.type,amount:tx.amount,name:tx.name,category:tx.cat})
+  });
+}
+
+async function deleteTx(id){
+  await sbReq(`/rest/v1/transactions?id=eq.${id}&user_id=eq.${USER_ID}`,{method:'DELETE',headers:{'Prefer':''}});
+}
+
+/* ── UTILS ── */
 function fmt(n){return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n))+' сум'}
 
 function showToast(msg){
@@ -485,44 +534,46 @@ function setType(t){
 document.getElementById('btn-expense').onclick=()=>setType('expense');
 document.getElementById('btn-income').onclick=()=>setType('income');
 
-document.getElementById('add-btn').onclick=()=>{
+/* ── ADD HANDLER ── */
+document.getElementById('add-btn').onclick=async()=>{
   const amount=parseFloat(document.getElementById('inp-amount').value);
   const name=document.getElementById('inp-name').value.trim();
   const cat=document.getElementById('inp-cat').value;
   if(!amount||amount<=0){showToast('Введите сумму');return}
   if(!name){showToast('Введите название');return}
-  const tx={id:Date.now(),type:cType,amount,name,cat,
-    date:now.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'2-digit'})};
-  const data=getData();data.unshift(tx);saveData(data);
-  document.getElementById('inp-amount').value='';
-  document.getElementById('inp-name').value='';
-  updateAll();
-  showToast(cType==='income'?'Доход добавлен ✓':'Расход добавлен ✓');
-  if(tg&&tg.HapticFeedback)tg.HapticFeedback.impactOccurred('light');
+  if(!USER_ID){showToast('Откройте через Telegram бот');return}
+  const btn=document.getElementById('add-btn');
+  btn.disabled=true;btn.textContent='Сохранение...';
+  try{
+    await addTx({type:cType,amount,name,cat});
+    document.getElementById('inp-amount').value='';
+    document.getElementById('inp-name').value='';
+    await updateAll();
+    showToast(cType==='income'?'Доход добавлен ✓':'Расход добавлен ✓');
+    if(tg&&tg.HapticFeedback)tg.HapticFeedback.impactOccurred('light');
+  }catch(e){showToast('Ошибка сохранения');}
+  finally{btn.disabled=false;btn.textContent='Добавить запись';}
 };
 
+/* ── TABS ── */
 function switchTo(tab){
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
   document.getElementById('tab-'+tab).classList.add('active');
-  if(tab==='history')renderHistory();
-  if(tab==='stats')renderStats();
+  updateAll();
 }
-
-document.querySelectorAll('.tab').forEach(btn=>{
-  btn.onclick=()=>switchTo(btn.dataset.tab);
-});
+document.querySelectorAll('.tab').forEach(btn=>{btn.onclick=()=>switchTo(btn.dataset.tab)});
 
 document.querySelectorAll('.fchip').forEach(btn=>{
   btn.onclick=()=>{
     document.querySelectorAll('.fchip').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');cFilter=btn.dataset.filter;renderHistory();
+    btn.classList.add('active');cFilter=btn.dataset.filter;updateAll();
   };
 });
 
-function updateSummary(){
-  const data=getData();
+/* ── RENDER ── */
+function updateSummary(data){
   const income=data.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
   const expense=data.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
   const bal=income-expense;
@@ -533,14 +584,14 @@ function updateSummary(){
   document.getElementById('total-expense').textContent=fmt(expense);
 }
 
-function renderHistory(){
-  const data=getData().filter(t=>cFilter==='all'||t.type===cFilter);
+function renderHistory(data){
+  const filtered=data.filter(t=>cFilter==='all'||t.type===cFilter);
   const list=document.getElementById('tx-list');
-  if(!data.length){
+  if(!filtered.length){
     list.innerHTML='<div class="empty"><div class="empty-ico">🗒️</div><div class="empty-txt">Записей пока нет</div></div>';
     return;
   }
-  list.innerHTML=data.map(t=>`
+  list.innerHTML=filtered.map(t=>`
     <div class="tx">
       <div class="tx-ico">${ICONS[t.cat]||'📌'}</div>
       <div class="tx-inf">
@@ -554,22 +605,23 @@ function renderHistory(){
     </div>
   `).join('');
   list.querySelectorAll('.tx-del').forEach(b=>{
-    b.onclick=()=>{
-      saveData(getData().filter(t=>t.id!==parseInt(b.dataset.id)));
-      updateAll();showToast('Запись удалена');
+    b.onclick=async()=>{
+      b.textContent='…';b.disabled=true;
+      try{await deleteTx(parseInt(b.dataset.id));await updateAll();showToast('Запись удалена');}
+      catch(e){showToast('Ошибка удаления');b.textContent='✕';b.disabled=false;}
     };
   });
 }
 
-function renderStats(){
-  const data=getData().filter(t=>t.type==='expense');
+function renderStats(data){
+  const expenses=data.filter(t=>t.type==='expense');
   const c=document.getElementById('stats-content');
-  if(!data.length){
+  if(!expenses.length){
     c.innerHTML='<div class="empty"><div class="empty-ico">📊</div><div class="empty-txt">Нет расходов для анализа</div></div>';
     return;
   }
   const byCat={};
-  data.forEach(t=>{byCat[t.cat]=(byCat[t.cat]||0)+t.amount});
+  expenses.forEach(t=>{byCat[t.cat]=(byCat[t.cat]||0)+t.amount});
   const sorted=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
   const max=sorted[0][1];
   const total=sorted.reduce((s,[,v])=>s+v,0);
@@ -592,7 +644,13 @@ function renderStats(){
   `;
 }
 
-function updateAll(){updateSummary();renderHistory();renderStats()}
+async function updateAll(){
+  const data=await getData();
+  updateSummary(data);
+  renderHistory(data);
+  renderStats(data);
+}
+
 fillCats();updateAll();
 </script>
 </body>
