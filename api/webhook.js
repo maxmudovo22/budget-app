@@ -5,27 +5,35 @@ const WEBAPP_URL = process.env.WEBAPP_URL || 'https://maxmudovo22.github.io/budg
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_KEY;
 
-const CATEGORY_MAP = {
+// Mirrors CATS/ICONS in index.html — bot must only ever produce categories
+// the Mini App actually knows how to display/group, so unmapped words fall
+// back to "Другое" instead of inventing a new category.
+const EXPENSE_MAP = {
   'такси': 'Транспорт', 'транспорт': 'Транспорт', 'автобус': 'Транспорт',
   'метро': 'Транспорт', 'маршрутка': 'Транспорт', 'бензин': 'Транспорт',
   'продукты': 'Продукты', 'магазин': 'Продукты', 'еда': 'Продукты',
   'обед': 'Кафе', 'кафе': 'Кафе', 'ресторан': 'Кафе',
   'кофе': 'Кафе', 'ужин': 'Кафе', 'завтрак': 'Кафе',
-  'зп': 'Зарплата', 'зарплата': 'Зарплата', 'аванс': 'Зарплата',
-  'фриланс': 'Фриланс', 'проект': 'Фриланс',
+  'кино': 'Развлечения', 'игры': 'Развлечения', 'игра': 'Развлечения', 'развлечения': 'Развлечения',
   'одежда': 'Одежда', 'обувь': 'Одежда',
   'аптека': 'Здоровье', 'лекарства': 'Здоровье', 'врач': 'Здоровье',
   'аренда': 'Жильё', 'квартира': 'Жильё', 'коммуналка': 'Жильё',
   'телефон': 'Связь', 'интернет': 'Связь',
   'учёба': 'Образование', 'курс': 'Образование',
-  'подарок': 'Подарок',
-  'инвестиции': 'Инвестиции',
 };
 
-function guessCategory(word) {
+const INCOME_MAP = {
+  'зп': 'Зарплата', 'зарплата': 'Зарплата', 'аванс': 'Зарплата',
+  'фриланс': 'Фриланс', 'проект': 'Фриланс',
+  'подарок': 'Подарок',
+  'инвестиции': 'Инвестиции',
+  'продажа': 'Продажа',
+};
+
+function guessCategory(word, type) {
   const w = word.toLowerCase();
-  if (CATEGORY_MAP[w]) return CATEGORY_MAP[w];
-  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  const map = type === 'income' ? INCOME_MAP : EXPENSE_MAP;
+  return map[w] || 'Другое';
 }
 
 async function supabaseInsert(table, data) {
@@ -43,6 +51,29 @@ async function supabaseInsert(table, data) {
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+function fmtSum(n) {
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(n)) + ' сум';
+}
+
+async function getTotals(chatId) {
+  try {
+    const res = await fetch(
+      `${SB_URL}/rest/v1/transactions?user_id=eq.${chatId}&select=type,amount`,
+      { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } }
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    let income = 0, expense = 0;
+    for (const r of rows) {
+      const amt = parseFloat(r.amount);
+      if (r.type === 'income') income += amt; else expense += amt;
+    }
+    return { income, expense };
+  } catch {
+    return null;
   }
 }
 
@@ -80,9 +111,26 @@ export default async function handler(req, res) {
     if (text === '/start') {
       await sendMessage(
         chatId,
-        'Привет! Я твой финансовый ассистент 💸\n\nПросто отправь мне сумму и категорию.\nНапример:\n<b>15000 такси</b> (сохранится как расход)\n<b>+200000 аванс</b> (сохранится как доход)',
+        'Привет! Я твой финансовый ассистент 💸\n\nПросто отправь мне сумму и категорию.\nНапример:\n<b>15000 такси</b> (сохранится как расход)\n<b>+200000 аванс</b> (сохранится как доход)\n\nКоманда <b>/баланс</b> — сводка по доходам и расходам.',
         webAppKeyboard
       );
+      res.status(200).end();
+      return;
+    }
+
+    if (text === '/баланс' || text.toLowerCase() === '/balance') {
+      const totals = await getTotals(chatId);
+      if (!totals) {
+        await sendMessage(chatId, '⚠️ Не удалось получить баланс, попробуй позже.', webAppKeyboard);
+      } else {
+        const { income, expense } = totals;
+        const balance = income - expense;
+        const reply =
+          `💰 Баланс: <b>${fmtSum(balance)}</b>\n\n` +
+          `🟢 Доходы: <b>${fmtSum(income)}</b>\n` +
+          `🔴 Расходы: <b>${fmtSum(expense)}</b>`;
+        await sendMessage(chatId, reply, webAppKeyboard);
+      }
       res.status(200).end();
       return;
     }
@@ -92,19 +140,21 @@ export default async function handler(req, res) {
       const amountStr = match[1];
       const type = amountStr.startsWith('+') ? 'income' : 'expense';
       const amount = Math.abs(parseFloat(amountStr));
-      const category = guessCategory(match[2]);
+      const rawWord = match[2].trim();
+      const name = rawWord.charAt(0).toUpperCase() + rawWord.slice(1).toLowerCase();
+      const category = guessCategory(rawWord, type);
 
       const ok = await supabaseInsert('transactions', {
         user_id: chatId,
         type,
         amount,
-        name: category,
+        name,
         category,
       });
 
       const sign = type === 'income' ? '🟢 Доход' : '🔴 Расход';
       const savedMark = ok ? '✅ Сохранено!' : '⚠️ Не удалось сохранить';
-      const reply = `${savedMark}\n\n${sign}: <b>${amount.toLocaleString('ru-RU').replace(/,/g, ' ')} сум</b>\nКатегория: <b>${category}</b>`;
+      const reply = `${savedMark}\n\n${sign}: <b>${fmtSum(amount)}</b>\nКатегория: <b>${category}</b>`;
       await sendMessage(chatId, reply, webAppKeyboard);
     } else {
       await sendMessage(
