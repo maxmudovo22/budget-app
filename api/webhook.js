@@ -29,17 +29,21 @@ function guessCategory(word) {
 }
 
 async function supabaseInsert(table, data) {
-  const res = await fetch(`${SB_URL}/rest/v1/${table}`, {
-    method: 'POST',
-    headers: {
-      apikey: SB_KEY,
-      Authorization: `Bearer ${SB_KEY}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=minimal',
-    },
-    body: JSON.stringify(data),
-  });
-  return res.ok;
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: {
+        apikey: SB_KEY,
+        Authorization: `Bearer ${SB_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify(data),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 async function sendMessage(chatId, text, keyboard) {
@@ -72,41 +76,45 @@ export default async function handler(req, res) {
   const chatId = message.chat.id;
   const text = (message.text || '').trim();
 
-  if (text === '/start') {
-    await sendMessage(
-      chatId,
-      'Привет! Я твой финансовый ассистент 💸\n\nПросто отправь мне сумму и категорию.\nНапример:\n<b>15000 такси</b> (сохранится как расход)\n<b>+200000 аванс</b> (сохранится как доход)',
-      webAppKeyboard
-    );
-    res.status(200).end();
-    return;
-  }
+  try {
+    if (text === '/start') {
+      await sendMessage(
+        chatId,
+        'Привет! Я твой финансовый ассистент 💸\n\nПросто отправь мне сумму и категорию.\nНапример:\n<b>15000 такси</b> (сохранится как расход)\n<b>+200000 аванс</b> (сохранится как доход)',
+        webAppKeyboard
+      );
+      res.status(200).end();
+      return;
+    }
 
-  const match = text.match(/^([+-]?\d+)\s+(.+)$/u);
-  if (match) {
-    const amountStr = match[1];
-    const type = amountStr.startsWith('+') ? 'income' : 'expense';
-    const amount = Math.abs(parseFloat(amountStr));
-    const category = guessCategory(match[2]);
+    const match = text.match(/^([+-]?\d+)\s+(.+)$/u);
+    if (match) {
+      const amountStr = match[1];
+      const type = amountStr.startsWith('+') ? 'income' : 'expense';
+      const amount = Math.abs(parseFloat(amountStr));
+      const category = guessCategory(match[2]);
 
-    const ok = await supabaseInsert('transactions', {
-      user_id: chatId,
-      type,
-      amount,
-      name: category,
-      category,
-    });
+      const ok = await supabaseInsert('transactions', {
+        user_id: chatId,
+        type,
+        amount,
+        name: category,
+        category,
+      });
 
-    const sign = type === 'income' ? '🟢 Доход' : '🔴 Расход';
-    const savedMark = ok ? '✅ Сохранено!' : '⚠️ Не удалось сохранить';
-    const reply = `${savedMark}\n\n${sign}: <b>${amount.toLocaleString('ru-RU').replace(/,/g, ' ')} сум</b>\nКатегория: <b>${category}</b>`;
-    await sendMessage(chatId, reply, webAppKeyboard);
-  } else {
-    await sendMessage(
-      chatId,
-      'Не понял формат 🤷‍♂️\n\nНапиши сумму и категорию через пробел.\nНапример: <b>15000 продукты</b>',
-      webAppKeyboard
-    );
+      const sign = type === 'income' ? '🟢 Доход' : '🔴 Расход';
+      const savedMark = ok ? '✅ Сохранено!' : '⚠️ Не удалось сохранить';
+      const reply = `${savedMark}\n\n${sign}: <b>${amount.toLocaleString('ru-RU').replace(/,/g, ' ')} сум</b>\nКатегория: <b>${category}</b>`;
+      await sendMessage(chatId, reply, webAppKeyboard);
+    } else {
+      await sendMessage(
+        chatId,
+        'Не понял формат 🤷‍♂️\n\nНапиши сумму и категорию через пробел.\nНапример: <b>15000 продукты</b>',
+        webAppKeyboard
+      );
+    }
+  } catch {
+    await sendMessage(chatId, '⚠️ Что-то сломалось, попробуй ещё раз чуть позже.').catch(() => {});
   }
 
   res.status(200).end();
