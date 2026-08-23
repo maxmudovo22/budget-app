@@ -355,13 +355,14 @@ input::placeholder{color:var(--text-3);font-weight:400}
 }
 .cal-nav-label{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--text-1)}
 
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:14px}
-.cal-dow{font-size:9px;font-weight:700;color:var(--text-3);text-align:center;text-transform:uppercase;padding-bottom:2px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin-bottom:14px;width:100%}
+.cal-dow{font-size:9px;font-weight:700;color:var(--text-3);text-align:center;text-transform:uppercase;padding-bottom:2px;min-width:0}
 .cal-cell{
-  aspect-ratio:1;border-radius:12px;background:var(--surface);
+  min-width:0;aspect-ratio:1;border-radius:12px;background:var(--surface);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
   cursor:pointer;touch-action:manipulation;box-shadow:var(--clay-sm);
   transition:background 0.15s var(--ease-out);
+  overflow:hidden;
 }
 .cal-cell.empty{background:transparent;box-shadow:none;cursor:default}
 .cal-cell.today{box-shadow:0 0 0 2px var(--primary) inset,var(--clay-sm)}
