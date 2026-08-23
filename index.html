@@ -345,27 +345,33 @@ input::placeholder{color:var(--text-3);font-weight:400}
 .balance-edit-row{display:flex;gap:8px;align-items:center;flex:1}
 .balance-edit-row input{width:auto;flex:1}
 
-.day-list{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
-.day-row{
-  background:var(--surface);border-radius:18px;
-  box-shadow:var(--clay-sm);overflow:hidden;
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.cal-nav-btn{
+  width:44px;height:44px;border-radius:14px;border:none;
+  background:var(--surface);box-shadow:var(--clay-sm);
+  color:var(--primary);font-size:18px;font-weight:700;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;touch-action:manipulation;
+  flex-shrink:0;
 }
-.day-row-head{
-  display:flex;align-items:center;gap:10px;
-  padding:13px 14px;cursor:pointer;touch-action:manipulation;
-  min-height:44px;
+.cal-nav-label{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--text-1)}
+
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:14px}
+.cal-dow{font-size:9px;font-weight:700;color:var(--text-3);text-align:center;text-transform:uppercase;padding-bottom:2px}
+.cal-cell{
+  aspect-ratio:1;border-radius:12px;background:var(--surface);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  cursor:pointer;touch-action:manipulation;box-shadow:var(--clay-sm);
+  transition:background 0.15s var(--ease-out);
 }
-.day-date{font-size:13px;font-weight:600;color:var(--text-1);width:48px;flex-shrink:0}
-.day-nums{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
-.day-nums-row{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums;font-weight:600}
-.day-nums-row.expense{color:var(--expense)}
-.day-nums-row.income{color:var(--income)}
-.day-pocket{font-size:13px;font-weight:700;color:var(--text-1);font-variant-numeric:tabular-nums;flex-shrink:0;text-align:right;white-space:nowrap}
-.day-chevron{width:16px;height:16px;color:var(--text-3);flex-shrink:0;transition:transform 0.25s var(--ease-out)}
-.day-row.open .day-chevron{transform:rotate(180deg)}
-.day-detail{display:grid;grid-template-rows:0fr;transition:grid-template-rows 0.3s var(--ease-out)}
-.day-row.open .day-detail{grid-template-rows:1fr}
-.day-detail-in{overflow:hidden}
+.cal-cell.empty{background:transparent;box-shadow:none;cursor:default}
+.cal-cell.today{box-shadow:0 0 0 2px var(--primary) inset,var(--clay-sm)}
+.cal-cell.selected{background:var(--primary)}
+.cal-cell.selected .cal-day-num,.cal-cell.selected .cal-day-amt.expense,.cal-cell.selected .cal-day-amt.income{color:#fff}
+.cal-day-num{font-size:13px;font-weight:700;color:var(--text-1)}
+.cal-day-amt{font-size:8px;font-weight:700;font-variant-numeric:tabular-nums}
+.cal-day-amt.expense{color:var(--expense)}
+.cal-day-amt.income{color:var(--income)}
+
 .day-detail-row{
   display:flex;align-items:center;gap:10px;
   padding:9px 14px;font-size:12px;
@@ -410,7 +416,7 @@ input::placeholder{color:var(--text-3);font-weight:400}
 
 /* ── REDUCED MOTION ── */
 @media (prefers-reduced-motion:reduce){
-  .action-btn,.tab,.fchip,.type-btn,.cat-bar,.toast,.day-chevron,.day-detail{transition:none}
+  .action-btn,.tab,.fchip,.type-btn,.cat-bar,.toast,.cal-cell{transition:none}
   .action-btn:active{transform:none}
 }
 </style>
@@ -601,27 +607,36 @@ async function deleteTx(id){
   await sbReq(`/rest/v1/transactions?id=eq.${id}&user_id=eq.${USER_ID}`,{method:'DELETE',headers:{'Prefer':''}});
 }
 
-/* ── MONTHLY BALANCE ── */
-function monthKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
+/* ── MONTHLY BALANCE (cached per viewed month) ── */
+let monthlyBalanceCache={};
 
-async function getMonthlyBalance(){
-  if(!USER_ID)return null;
+async function getMonthlyBalanceFor(key){
+  if(key in monthlyBalanceCache)return monthlyBalanceCache[key];
+  if(!USER_ID){monthlyBalanceCache[key]=null;return null}
   try{
-    const rows=await sbReq(`/rest/v1/monthly_balance?user_id=eq.${USER_ID}&year_month=eq.${monthKey(new Date())}`);
-    return rows[0]||null;
-  }catch(e){return null}
+    const rows=await sbReq(`/rest/v1/monthly_balance?user_id=eq.${USER_ID}&year_month=eq.${key}`);
+    monthlyBalanceCache[key]=rows[0]||null;
+  }catch(e){monthlyBalanceCache[key]=null}
+  return monthlyBalanceCache[key];
 }
 
-async function saveMonthlyBalance(value){
+async function saveMonthlyBalance(key,value){
   await sbReq('/rest/v1/monthly_balance?on_conflict=user_id,year_month',{
     method:'POST',
     headers:{'Prefer':'resolution=merge-duplicates,return=representation'},
-    body:JSON.stringify({user_id:USER_ID,year_month:monthKey(new Date()),starting_balance:value})
+    body:JSON.stringify({user_id:USER_ID,year_month:key,starting_balance:value})
   });
+  monthlyBalanceCache[key]={starting_balance:value};
 }
 
 /* ── UTILS ── */
 function fmt(n){return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n))+' сум'}
+function fmtShort(n){
+  const a=Math.abs(n);
+  if(a>=1000000)return (n/1000000).toFixed(Math.round(a)%1000000===0?0:1)+'M';
+  if(a>=1000)return Math.round(n/1000)+'K';
+  return String(Math.round(n));
+}
 
 function showToast(msg){
   const el=document.getElementById('toast');
@@ -803,22 +818,28 @@ function renderStats(data){
 let lastData=[];
 
 const MONTHS_SHORT=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+const DOW=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
 
-function renderTable(data){
+let viewYear=new Date().getFullYear(),viewMonth=new Date().getMonth();
+let selectedDay=null;
+
+async function renderTable(data){
   const c=document.getElementById('table-content');
-  const now=new Date();
-  const y=now.getFullYear(),m=now.getMonth(),today=now.getDate();
+  const y=viewYear,m=viewMonth;
+  const key=y+'-'+String(m+1).padStart(2,'0');
   const monthTx=data.filter(t=>t.ts.getFullYear()===y&&t.ts.getMonth()===m);
+  const mb=await getMonthlyBalanceFor(key);
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const start=mb?parseFloat(mb.starting_balance):0;
 
-  const start=monthlyBalance?parseFloat(monthlyBalance.starting_balance):0;
   let running=start;
-  const rows=[];
-  for(let day=1;day<=today;day++){
+  const dayInfo={};
+  for(let day=1;day<=daysInMonth;day++){
     const dayTx=monthTx.filter(t=>t.ts.getDate()===day);
     const dayExpense=dayTx.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
     const dayIncome=dayTx.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
     running+=dayIncome-dayExpense;
-    rows.push({day,dayTx,dayExpense,dayIncome,pocket:running});
+    dayInfo[day]={dayTx,dayExpense,dayIncome,pocket:running};
   }
 
   const catTotals={};
@@ -832,37 +853,56 @@ function renderTable(data){
     <div class="balance-card" id="balance-card">
       <div>
         <div class="balance-card-lbl">Баланс на начало месяца</div>
-        <div class="balance-card-val">${monthlyBalance?fmt(start):'Не задан'}</div>
+        <div class="balance-card-val">${mb?fmt(start):'Не задан'}</div>
       </div>
-      <button class="balance-edit-btn" id="balance-edit-btn" type="button">${monthlyBalance?'Изменить':'Задать'}</button>
+      <button class="balance-edit-btn" id="balance-edit-btn" type="button">${mb?'Изменить':'Задать'}</button>
     </div>`;
 
-  const dayRowsHtml=rows.map(r=>{
-    const byCat=r.dayTx.reduce((acc,t)=>{acc[t.cat]=acc[t.cat]||{amt:0,type:t.type};acc[t.cat].amt+=t.amount;return acc},{});
-    const detailHtml=Object.keys(byCat).length?Object.entries(byCat).map(([cat,v])=>`
+  const navHtml=`
+    <div class="cal-nav">
+      <button class="cal-nav-btn" id="cal-prev" type="button" aria-label="Предыдущий месяц">‹</button>
+      <div class="cal-nav-label">${months[m]} ${y}</div>
+      <button class="cal-nav-btn" id="cal-next" type="button" aria-label="Следующий месяц">›</button>
+    </div>`;
+
+  const today=new Date();
+  const isCurrentMonth=y===today.getFullYear()&&m===today.getMonth();
+  const todayNum=today.getDate();
+  const firstDow=(new Date(y,m,1).getDay()+6)%7;
+
+  let cellsHtml=DOW.map(d=>`<div class="cal-dow">${d}</div>`).join('');
+  for(let i=0;i<firstDow;i++)cellsHtml+='<div class="cal-cell empty"></div>';
+  for(let day=1;day<=daysInMonth;day++){
+    const info=dayInfo[day];
+    const net=info.dayIncome-info.dayExpense;
+    const amtHtml=net!==0?`<div class="cal-day-amt ${net>0?'income':'expense'}">${net>0?'+':'−'}${fmtShort(Math.abs(net))}</div>`:'';
+    const cls=['cal-cell'];
+    if(isCurrentMonth&&day===todayNum)cls.push('today');
+    if(selectedDay===day)cls.push('selected');
+    cellsHtml+=`<div class="${cls.join(' ')}" data-day="${day}">
+      <div class="cal-day-num">${day}</div>
+      ${amtHtml}
+    </div>`;
+  }
+
+  let detailHtml='';
+  if(selectedDay&&dayInfo[selectedDay]){
+    const info=dayInfo[selectedDay];
+    const byCat=info.dayTx.reduce((acc,t)=>{acc[t.cat]=acc[t.cat]||{amt:0,type:t.type};acc[t.cat].amt+=t.amount;return acc},{});
+    const rowsHtml=Object.keys(byCat).length?Object.entries(byCat).map(([cat,v])=>`
       <div class="day-detail-row">
         <div class="cat-ico">${ICON_SVG[cat]||ICON_SVG['Другое']}</div>
         <div class="day-detail-name">${cat}</div>
         <div class="day-detail-amt" style="color:${v.type==='income'?'var(--income)':'var(--expense)'}">${v.type==='income'?'+':'−'}${fmt(v.amt)}</div>
       </div>`).join(''):'<div class="day-detail-row"><div class="day-detail-name" style="color:var(--text-3)">Нет записей</div></div>';
+    detailHtml=`
+      <div class="stat-block">
+        <div class="sb-title">${selectedDay} ${MONTHS_SHORT[m]} · В кармане: ${fmt(info.pocket)}</div>
+        ${rowsHtml}
+      </div>`;
+  }
 
-    return `
-    <div class="day-row" data-day="${r.day}">
-      <div class="day-row-head">
-        <div class="day-date">${r.day} ${MONTHS_SHORT[m]}</div>
-        <div class="day-nums">
-          ${r.dayExpense?`<div class="day-nums-row expense">−${fmt(r.dayExpense)}</div>`:''}
-          ${r.dayIncome?`<div class="day-nums-row income">+${fmt(r.dayIncome)}</div>`:''}
-          ${!r.dayExpense&&!r.dayIncome?'<div class="day-nums-row">—</div>':''}
-        </div>
-        <div class="day-pocket">${fmt(r.pocket)}</div>
-        <div class="day-chevron">${SVG_OPEN}<path d="M6 9l6 6 6-6"/></svg></div>
-      </div>
-      <div class="day-detail"><div class="day-detail-in">${detailHtml}</div></div>
-    </div>`;
-  }).reverse().join('');
-
-  c.innerHTML=balanceCardHtml+`<div class="day-list">${dayRowsHtml||'<div class="empty"><div class="empty-ico">'+EMPTY_ICO_HISTORY+'</div><div class="empty-txt">Записей пока нет</div></div>'}</div>`+`
+  c.innerHTML=balanceCardHtml+navHtml+`<div class="cal-grid">${cellsHtml}</div>`+detailHtml+`
     <div class="stat-block">
       <div class="sb-title">Расходы за месяц по категориям</div>
       ${catSorted.length?catSorted.map(([cat,amt],i)=>`
@@ -885,43 +925,57 @@ function renderTable(data){
       </div>
     </div>`;
 
-  document.getElementById('balance-edit-btn').onclick=editBalance;
-  c.querySelectorAll('.day-row-head').forEach(h=>{
-    h.onclick=()=>h.parentElement.classList.toggle('open');
+  document.getElementById('balance-edit-btn').onclick=()=>editBalance(key);
+  document.getElementById('cal-prev').onclick=()=>{
+    viewMonth--;if(viewMonth<0){viewMonth=11;viewYear--}
+    selectedDay=null;renderTable(lastData);
+  };
+  document.getElementById('cal-next').onclick=()=>{
+    viewMonth++;if(viewMonth>11){viewMonth=0;viewYear++}
+    selectedDay=null;renderTable(lastData);
+  };
+  c.querySelectorAll('.cal-cell:not(.empty)').forEach(cell=>{
+    cell.onclick=()=>{
+      const day=parseInt(cell.dataset.day);
+      selectedDay=selectedDay===day?null:day;
+      renderTable(lastData);
+    };
   });
 }
 
-function editBalance(){
+function editBalance(key){
   const card=document.getElementById('balance-card');
+  const mb=monthlyBalanceCache[key];
+  const startVal=mb?Number(mb.starting_balance).toLocaleString('en-US').replace(/,/g,'.'):'';
   card.innerHTML=`<div class="balance-edit-row">
-    <input type="number" id="balance-input" inputmode="decimal" placeholder="0" value="${monthlyBalance?monthlyBalance.starting_balance:''}"/>
+    <input type="text" id="balance-input" inputmode="numeric" placeholder="0" value="${startVal}"/>
     <button class="balance-edit-btn" id="balance-save-btn" type="button">Сохранить</button>
   </div>`;
   const inp=document.getElementById('balance-input');
   inp.focus();
+  inp.addEventListener('input',()=>{
+    const digits=inp.value.replace(/\D/g,'').slice(0,12);
+    inp.value=digits?Number(digits).toLocaleString('en-US').replace(/,/g,'.'):'';
+  });
   document.getElementById('balance-save-btn').onclick=async()=>{
-    const val=parseFloat(inp.value);
+    const val=parseFloat(inp.value.replace(/\./g,''));
     if(isNaN(val)){showToast('Введите число');return}
     const btn=document.getElementById('balance-save-btn');
     btn.disabled=true;btn.textContent='Сохранение...';
     try{
-      await saveMonthlyBalance(val);
-      monthlyBalance={starting_balance:val};
-      renderTable(lastData);
+      await saveMonthlyBalance(key,val);
+      await renderTable(lastData);
       showToast('Баланс сохранён ✓');
     }catch(e){showToast('Ошибка сохранения');btn.disabled=false;btn.textContent='Сохранить'}
   };
 }
 
-let monthlyBalance=null,monthlyBalanceChecked=false;
-
 async function updateAll(){
   lastData=await getData();
-  if(!monthlyBalanceChecked){monthlyBalance=await getMonthlyBalance();monthlyBalanceChecked=true}
   updateSummary(lastData);
   renderHistory(lastData);
   renderStats(lastData);
-  renderTable(lastData);
+  await renderTable(lastData);
 }
 
 fillCats();updateAll();
