@@ -355,10 +355,10 @@ input::placeholder{color:var(--text-3);font-weight:400}
 }
 .cal-nav-label{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--text-1)}
 
-.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin-bottom:14px;width:100%}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:auto;grid-auto-rows:52px;gap:5px;margin-bottom:14px;width:100%}
 .cal-dow{font-size:9px;font-weight:700;color:var(--text-3);text-align:center;text-transform:uppercase;padding-bottom:2px;min-width:0}
 .cal-cell{
-  min-width:0;aspect-ratio:1;border-radius:12px;background:var(--surface);
+  min-width:0;border-radius:12px;background:var(--surface);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
   cursor:pointer;touch-action:manipulation;box-shadow:var(--clay-sm);
   transition:background 0.15s var(--ease-out);
@@ -770,12 +770,14 @@ function scheduleDelete(id){
   renderHistory(lastData);
   updateSummary(visible);
   renderStats(visible);
+  renderTable(lastData);
   showUndoToast('Запись удалена',()=>{
     clearTimeout(pendingDelete.timer);
     pendingDelete=null;
     renderHistory(lastData);
     updateSummary(lastData);
     renderStats(lastData);
+    renderTable(lastData);
   });
 }
 
@@ -828,7 +830,7 @@ async function renderTable(data){
   const c=document.getElementById('table-content');
   const y=viewYear,m=viewMonth;
   const key=y+'-'+String(m+1).padStart(2,'0');
-  const monthTx=data.filter(t=>t.ts.getFullYear()===y&&t.ts.getMonth()===m);
+  const monthTx=data.filter(t=>t.ts.getFullYear()===y&&t.ts.getMonth()===m&&!(pendingDelete&&pendingDelete.id===t.id));
   const mb=await getMonthlyBalanceFor(key);
   const daysInMonth=new Date(y,m+1,0).getDate();
   const start=mb?parseFloat(mb.starting_balance):0;
@@ -889,12 +891,12 @@ async function renderTable(data){
   let detailHtml='';
   if(selectedDay&&dayInfo[selectedDay]){
     const info=dayInfo[selectedDay];
-    const byCat=info.dayTx.reduce((acc,t)=>{acc[t.cat]=acc[t.cat]||{amt:0,type:t.type};acc[t.cat].amt+=t.amount;return acc},{});
-    const rowsHtml=Object.keys(byCat).length?Object.entries(byCat).map(([cat,v])=>`
+    const rowsHtml=info.dayTx.length?info.dayTx.map(t=>`
       <div class="day-detail-row">
-        <div class="cat-ico">${ICON_SVG[cat]||ICON_SVG['Другое']}</div>
-        <div class="day-detail-name">${cat}</div>
-        <div class="day-detail-amt" style="color:${v.type==='income'?'var(--income)':'var(--expense)'}">${v.type==='income'?'+':'−'}${fmt(v.amt)}</div>
+        <div class="cat-ico">${ICON_SVG[t.cat]||ICON_SVG['Другое']}</div>
+        <div class="day-detail-name">${t.name}</div>
+        <div class="day-detail-amt" style="color:${t.type==='income'?'var(--income)':'var(--expense)'}">${t.type==='income'?'+':'−'}${fmt(t.amount)}</div>
+        <button class="tx-del" data-id="${t.id}" aria-label="Удалить запись">✕</button>
       </div>`).join(''):'<div class="day-detail-row"><div class="day-detail-name" style="color:var(--text-3)">Нет записей</div></div>';
     detailHtml=`
       <div class="stat-block">
@@ -941,6 +943,9 @@ async function renderTable(data){
       selectedDay=selectedDay===day?null:day;
       renderTable(lastData);
     };
+  });
+  c.querySelectorAll('.day-detail-row .tx-del').forEach(b=>{
+    b.onclick=()=>scheduleDelete(parseInt(b.dataset.id));
   });
 }
 
