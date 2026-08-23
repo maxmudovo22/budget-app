@@ -567,14 +567,14 @@ let cType='expense',cFilter='all';
 /* ── SUPABASE HELPERS ── */
 async function sbReq(path,opts={}){
   const res=await fetch(SB_URL+path,{
+    ...opts,
     headers:{
       'apikey':SB_KEY,
       'Authorization':'Bearer '+SB_KEY,
       'Content-Type':'application/json',
       'Prefer':'return=representation',
       ...(opts.headers||{})
-    },
-    ...opts
+    }
   });
   if(!res.ok)throw new Error('SB '+res.status);
   const text=await res.text();
