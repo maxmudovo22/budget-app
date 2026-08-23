@@ -760,31 +760,42 @@ function renderHistory(data){
   });
 }
 
-/* ── DELETE WITH UNDO ── */
-let pendingDelete=null; // {id, timer}
+/* ── DELETE WITH UNDO ──
+   Deletes immediately (fire the real request right away) instead of
+   waiting out an undo window before committing: Telegram's WebView can
+   suspend/background the Mini App the moment a user taps away, and a
+   delayed setTimeout-based commit may simply never run, leaving the
+   record undeleted. Undo re-creates the transaction instead of
+   cancelling a pending timer, so it stays correct regardless of when
+   (or whether) the app is still open. */
+let pendingDelete=null; // {id} — only used to optimistically hide the row
 
-function scheduleDelete(id){
-  if(pendingDelete){clearTimeout(pendingDelete.timer);finalizeDelete(pendingDelete.id)}
-  pendingDelete={id,timer:setTimeout(()=>finalizeDelete(id),4000)};
-  const visible=lastData.filter(t=>t.id!==id);
+function refreshAfterLocalChange(){
+  const visible=pendingDelete?lastData.filter(t=>t.id!==pendingDelete.id):lastData;
   renderHistory(lastData);
   updateSummary(visible);
   renderStats(visible);
   renderTable(lastData);
-  showUndoToast('Запись удалена',()=>{
-    clearTimeout(pendingDelete.timer);
-    pendingDelete=null;
-    renderHistory(lastData);
-    updateSummary(lastData);
-    renderStats(lastData);
-    renderTable(lastData);
-  });
 }
 
-async function finalizeDelete(id){
-  pendingDelete=null;
-  try{await deleteTx(id)}catch(e){showToast('Ошибка удаления')}
-  await updateAll();
+function scheduleDelete(id){
+  const tx=lastData.find(t=>t.id===id);
+  if(!tx)return;
+  pendingDelete={id};
+  refreshAfterLocalChange();
+
+  deleteTx(id).catch(()=>{
+    pendingDelete=null;
+    refreshAfterLocalChange();
+    showToast('Ошибка удаления');
+  });
+
+  showUndoToast('Запись удалена',async()=>{
+    pendingDelete=null;
+    refreshAfterLocalChange();
+    try{await addTx({type:tx.type,amount:tx.amount,name:tx.name,cat:tx.cat})}catch(e){}
+    await updateAll();
+  });
 }
 
 function renderStats(data){
