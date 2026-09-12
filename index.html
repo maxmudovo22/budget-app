@@ -329,22 +329,6 @@ input::placeholder{color:var(--text-3);font-weight:400}
 }
 
 /* ── MONTHLY TABLE ── */
-.balance-card{
-  background:var(--surface);border-radius:22px;padding:18px 20px;
-  box-shadow:var(--clay-md);margin-bottom:14px;
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-}
-.balance-card-lbl{font-size:9px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:0.09em;margin-bottom:4px}
-.balance-card-val{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--text-1);font-variant-numeric:tabular-nums}
-.balance-edit-btn{
-  background:var(--surface-2);border:none;border-radius:12px;
-  padding:10px 16px;font-size:12px;font-weight:600;color:var(--primary);
-  cursor:pointer;touch-action:manipulation;font-family:'DM Sans',sans-serif;
-  min-height:44px;flex-shrink:0;
-}
-.balance-edit-row{display:flex;gap:8px;align-items:center;flex:1}
-.balance-edit-row input{width:auto;flex:1}
-
 .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .cal-nav-btn{
   width:44px;height:44px;border-radius:14px;border:none;
@@ -388,6 +372,40 @@ input::placeholder{color:var(--text-3);font-weight:400}
 .empty-ico{margin-bottom:10px}
 .empty-ico svg{width:36px;height:36px}
 .empty-txt{font-size:13px;font-weight:600}
+
+/* ── DAY MODAL ── */
+.day-modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.35);
+  display:flex;align-items:flex-end;justify-content:center;
+  z-index:300;opacity:0;pointer-events:none;
+  transition:opacity 0.2s var(--ease-out);
+}
+.day-modal-overlay.show{opacity:1;pointer-events:auto}
+.day-modal{
+  background:var(--bg);border-radius:24px 24px 0 0;
+  padding:10px 20px calc(24px + env(safe-area-inset-bottom));
+  width:100%;max-width:480px;max-height:78vh;overflow-y:auto;
+  box-shadow:var(--clay-md);
+  transform:translateY(24px);
+  transition:transform 0.25s var(--ease-out);
+}
+.day-modal-overlay.show .day-modal{transform:translateY(0)}
+.day-modal-handle{width:36px;height:4px;background:rgba(0,0,0,0.12);border-radius:2px;margin:0 auto 14px}
+.day-modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.day-modal-title{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--text-1)}
+.day-modal-close{
+  background:var(--surface-2);border:none;border-radius:12px;
+  width:32px;height:32px;flex-shrink:0;color:var(--text-2);font-size:13px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation;
+}
+.day-modal-totals{display:flex;gap:10px;margin-bottom:14px}
+.day-modal-total{flex:1;background:var(--surface);border-radius:16px;box-shadow:var(--clay-sm);padding:10px 12px}
+.day-modal-total-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3);margin-bottom:3px}
+.day-modal-total-val{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.day-modal-total-val.income{color:var(--income)}
+.day-modal-total-val.expense{color:var(--expense)}
+.day-modal-list{background:var(--surface);border-radius:16px;box-shadow:var(--clay-sm);overflow:hidden}
+.day-modal-list .day-detail-row:first-child{border-top:none}
 
 /* ── TOAST ── */
 .toast{
@@ -524,6 +542,17 @@ input::placeholder{color:var(--text-3);font-weight:400}
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<div class="day-modal-overlay" id="day-modal-overlay" hidden>
+  <div class="day-modal">
+    <div class="day-modal-handle"></div>
+    <div class="day-modal-header">
+      <div class="day-modal-title" id="day-modal-title"></div>
+      <button class="day-modal-close" id="day-modal-close" type="button" aria-label="Закрыть">✕</button>
+    </div>
+    <div id="day-modal-body"></div>
+  </div>
+</div>
+
 </div>
 <script>
 /* ── SUPABASE CONFIG ── */
@@ -606,28 +635,6 @@ async function addTx(tx){
 
 async function deleteTx(id){
   await sbReq(`/rest/v1/transactions?id=eq.${id}&user_id=eq.${USER_ID}`,{method:'DELETE',headers:{'Prefer':''}});
-}
-
-/* ── MONTHLY BALANCE (cached per viewed month) ── */
-let monthlyBalanceCache={};
-
-async function getMonthlyBalanceFor(key){
-  if(key in monthlyBalanceCache)return monthlyBalanceCache[key];
-  if(!USER_ID){monthlyBalanceCache[key]=null;return null}
-  try{
-    const rows=await sbReq(`/rest/v1/monthly_balance?user_id=eq.${USER_ID}&year_month=eq.${key}`);
-    monthlyBalanceCache[key]=rows[0]||null;
-  }catch(e){monthlyBalanceCache[key]=null}
-  return monthlyBalanceCache[key];
-}
-
-async function saveMonthlyBalance(key,value){
-  await sbReq('/rest/v1/monthly_balance?on_conflict=user_id,year_month',{
-    method:'POST',
-    headers:{'Prefer':'resolution=merge-duplicates,return=representation'},
-    body:JSON.stringify({user_id:USER_ID,year_month:key,starting_balance:value})
-  });
-  monthlyBalanceCache[key]={starting_balance:value};
 }
 
 /* ── UTILS ── */
@@ -842,11 +849,9 @@ async function renderTable(data){
   const y=viewYear,m=viewMonth;
   const key=y+'-'+String(m+1).padStart(2,'0');
   const monthTx=data.filter(t=>t.ts.getFullYear()===y&&t.ts.getMonth()===m&&!(pendingDelete&&pendingDelete.id===t.id));
-  const mb=await getMonthlyBalanceFor(key);
   const daysInMonth=new Date(y,m+1,0).getDate();
-  const start=mb?parseFloat(mb.starting_balance):0;
 
-  let running=start;
+  let running=0;
   const dayInfo={};
   for(let day=1;day<=daysInMonth;day++){
     const dayTx=monthTx.filter(t=>t.ts.getDate()===day);
@@ -862,15 +867,6 @@ async function renderTable(data){
   const monthIncomeTotal=monthTx.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
   const catSorted=Object.entries(catTotals).sort((a,b)=>b[1]-a[1]);
   const catMax=catSorted.length?catSorted[0][1]:1;
-
-  const balanceCardHtml=`
-    <div class="balance-card" id="balance-card">
-      <div>
-        <div class="balance-card-lbl">Баланс на начало месяца</div>
-        <div class="balance-card-val">${mb?fmt(start):'Не задан'}</div>
-      </div>
-      <button class="balance-edit-btn" id="balance-edit-btn" type="button">${mb?'Изменить':'Задать'}</button>
-    </div>`;
 
   const navHtml=`
     <div class="cal-nav">
@@ -899,24 +895,7 @@ async function renderTable(data){
     </div>`;
   }
 
-  let detailHtml='';
-  if(selectedDay&&dayInfo[selectedDay]){
-    const info=dayInfo[selectedDay];
-    const rowsHtml=info.dayTx.length?info.dayTx.map(t=>`
-      <div class="day-detail-row">
-        <div class="cat-ico">${ICON_SVG[t.cat]||ICON_SVG['Другое']}</div>
-        <div class="day-detail-name">${t.name}</div>
-        <div class="day-detail-amt" style="color:${t.type==='income'?'var(--income)':'var(--expense)'}">${t.type==='income'?'+':'−'}${fmt(t.amount)}</div>
-        <button class="tx-del" data-id="${t.id}" aria-label="Удалить запись">✕</button>
-      </div>`).join(''):'<div class="day-detail-row"><div class="day-detail-name" style="color:var(--text-3)">Нет записей</div></div>';
-    detailHtml=`
-      <div class="stat-block">
-        <div class="sb-title">${selectedDay} ${MONTHS_SHORT[m]} · В кармане: ${fmt(info.pocket)}</div>
-        ${rowsHtml}
-      </div>`;
-  }
-
-  c.innerHTML=balanceCardHtml+navHtml+`<div class="cal-grid">${cellsHtml}</div>`+detailHtml+`
+  c.innerHTML=navHtml+`<div class="cal-grid">${cellsHtml}</div>`+`
     <div class="stat-block">
       <div class="sb-title">Расходы за месяц по категориям</div>
       ${catSorted.length?catSorted.map(([cat,amt],i)=>`
@@ -939,7 +918,6 @@ async function renderTable(data){
       </div>
     </div>`;
 
-  document.getElementById('balance-edit-btn').onclick=()=>editBalance(key);
   document.getElementById('cal-prev').onclick=()=>{
     viewMonth--;if(viewMonth<0){viewMonth=11;viewYear--}
     selectedDay=null;renderTable(lastData);
@@ -950,42 +928,58 @@ async function renderTable(data){
   };
   c.querySelectorAll('.cal-cell:not(.empty)').forEach(cell=>{
     cell.onclick=()=>{
-      const day=parseInt(cell.dataset.day);
-      selectedDay=selectedDay===day?null:day;
-      renderTable(lastData);
+      c.querySelectorAll('.cal-cell.selected').forEach(el=>el.classList.remove('selected'));
+      cell.classList.add('selected');
+      selectedDay=parseInt(cell.dataset.day);
+      openDayModal(dayInfo[selectedDay]);
     };
   });
-  c.querySelectorAll('.day-detail-row .tx-del').forEach(b=>{
-    b.onclick=()=>scheduleDelete(parseInt(b.dataset.id));
-  });
+
+  if(selectedDay&&dayInfo[selectedDay])openDayModal(dayInfo[selectedDay]);
 }
 
-function editBalance(key){
-  const card=document.getElementById('balance-card');
-  const mb=monthlyBalanceCache[key];
-  const startVal=mb?Number(mb.starting_balance).toLocaleString('en-US').replace(/,/g,'.'):'';
-  card.innerHTML=`<div class="balance-edit-row">
-    <input type="text" id="balance-input" inputmode="numeric" placeholder="0" value="${startVal}"/>
-    <button class="balance-edit-btn" id="balance-save-btn" type="button">Сохранить</button>
-  </div>`;
-  const inp=document.getElementById('balance-input');
-  inp.focus();
-  inp.addEventListener('input',()=>{
-    const digits=inp.value.replace(/\D/g,'').slice(0,12);
-    inp.value=digits?Number(digits).toLocaleString('en-US').replace(/,/g,'.'):'';
+function openDayModal(info){
+  const title=document.getElementById('day-modal-title');
+  const body=document.getElementById('day-modal-body');
+  title.textContent=`${selectedDay} ${MONTHS_SHORT[viewMonth]} · В кармане ${fmt(info.pocket)}`;
+  const rowsHtml=info.dayTx.length?info.dayTx.map(t=>`
+    <div class="day-detail-row">
+      <div class="cat-ico">${ICON_SVG[t.cat]||ICON_SVG['Другое']}</div>
+      <div class="day-detail-name">${t.name}</div>
+      <div class="day-detail-amt" style="color:${t.type==='income'?'var(--income)':'var(--expense)'}">${t.type==='income'?'+':'−'}${fmt(t.amount)}</div>
+      <button class="tx-del" data-id="${t.id}" aria-label="Удалить запись">✕</button>
+    </div>`).join(''):'<div class="day-detail-row"><div class="day-detail-name" style="color:var(--text-3)">Нет записей</div></div>';
+  body.innerHTML=`
+    <div class="day-modal-totals">
+      <div class="day-modal-total">
+        <div class="day-modal-total-lbl">Доход</div>
+        <div class="day-modal-total-val income">${fmt(info.dayIncome)}</div>
+      </div>
+      <div class="day-modal-total">
+        <div class="day-modal-total-lbl">Расход</div>
+        <div class="day-modal-total-val expense">${fmt(info.dayExpense)}</div>
+      </div>
+    </div>
+    <div class="day-modal-list">${rowsHtml}</div>`;
+  body.querySelectorAll('.tx-del').forEach(b=>{
+    b.onclick=()=>{closeDayModal();scheduleDelete(parseInt(b.dataset.id))};
   });
-  document.getElementById('balance-save-btn').onclick=async()=>{
-    const val=parseFloat(inp.value.replace(/\./g,''));
-    if(isNaN(val)){showToast('Введите число');return}
-    const btn=document.getElementById('balance-save-btn');
-    btn.disabled=true;btn.textContent='Сохранение...';
-    try{
-      await saveMonthlyBalance(key,val);
-      await renderTable(lastData);
-      showToast('Баланс сохранён ✓');
-    }catch(e){showToast('Ошибка сохранения');btn.disabled=false;btn.textContent='Сохранить'}
-  };
+  document.getElementById('day-modal-overlay').hidden=false;
+  requestAnimationFrame(()=>document.getElementById('day-modal-overlay').classList.add('show'));
 }
+
+function closeDayModal(){
+  const overlay=document.getElementById('day-modal-overlay');
+  overlay.classList.remove('show');
+  selectedDay=null;
+  document.querySelectorAll('.cal-cell.selected').forEach(el=>el.classList.remove('selected'));
+  setTimeout(()=>{overlay.hidden=true},200);
+}
+
+document.getElementById('day-modal-close').onclick=closeDayModal;
+document.getElementById('day-modal-overlay').onclick=(e)=>{
+  if(e.target.id==='day-modal-overlay')closeDayModal();
+};
 
 async function updateAll(){
   lastData=await getData();
