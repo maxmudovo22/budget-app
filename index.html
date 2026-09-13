@@ -806,34 +806,59 @@ function scheduleDelete(id){
 }
 
 function renderStats(data){
-  const expenses=data.filter(t=>t.type==='expense');
   const c=document.getElementById('stats-content');
-  if(!expenses.length){
-    c.innerHTML=`<div class="empty"><div class="empty-ico">${EMPTY_ICO_STATS}</div><div class="empty-txt">Нет расходов для анализа</div></div>`;
-    return;
-  }
+  const y=viewYear,m=viewMonth;
+  const monthTx=data.filter(t=>t.ts.getFullYear()===y&&t.ts.getMonth()===m);
+
+  const navHtml=`
+    <div class="cal-nav">
+      <button class="cal-nav-btn" id="stats-prev" type="button" aria-label="Предыдущий месяц">‹</button>
+      <div class="cal-nav-label">${months[m]} ${y}</div>
+      <button class="cal-nav-btn" id="stats-next" type="button" aria-label="Следующий месяц">›</button>
+    </div>`;
+
+  const expenses=monthTx.filter(t=>t.type==='expense');
+  const incomeTotal=monthTx.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const expenseTotal=expenses.reduce((s,t)=>s+t.amount,0);
+
   const byCat={};
   expenses.forEach(t=>{byCat[t.cat]=(byCat[t.cat]||0)+t.amount});
   const sorted=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
-  const max=sorted[0][1];
-  const total=sorted.reduce((s,[,v])=>s+v,0);
-  c.innerHTML=`
+  const max=sorted.length?sorted[0][1]:1;
+
+  c.innerHTML=navHtml+`
+    <div class="stat-block">
+      <div class="sb-title">Итого за месяц</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600;color:var(--income)">Доход</div>
+        <div style="font-size:15px;font-weight:700;color:var(--income);font-variant-numeric:tabular-nums">${fmt(incomeTotal)}</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:13px;font-weight:600;color:var(--expense)">Расход</div>
+        <div style="font-size:15px;font-weight:700;color:var(--expense);font-variant-numeric:tabular-nums">${fmt(expenseTotal)}</div>
+      </div>
+    </div>
     <div class="stat-block">
       <div class="sb-title">Расходы по категориям</div>
-      ${sorted.map(([cat,amt],i)=>`
+      ${sorted.length?sorted.map(([cat,amt],i)=>`
         <div class="cat-row">
           <div class="cat-ico">${ICON_SVG[cat]||ICON_SVG['Другое']}</div>
           <div class="cat-name">${cat}</div>
           <div class="cat-bar-bg"><div class="cat-bar" style="transform:scaleX(${(amt/max).toFixed(4)});background:${BARS[i%BARS.length]}"></div></div>
           <div class="cat-amt">${fmt(amt)}</div>
         </div>
-      `).join('')}
-    </div>
-    <div class="stat-block">
-      <div class="sb-title">Итого расходов</div>
-      <div style="font-family:'Playfair Display',serif;font-size:30px;font-weight:700;color:var(--expense);font-variant-numeric:tabular-nums">${fmt(total)}</div>
+      `).join(''):'<div class="empty-txt" style="color:var(--text-3);font-weight:500">Нет расходов в этом месяце</div>'}
     </div>
   `;
+
+  document.getElementById('stats-prev').onclick=()=>{
+    viewMonth--;if(viewMonth<0){viewMonth=11;viewYear--}
+    renderStats(lastData);
+  };
+  document.getElementById('stats-next').onclick=()=>{
+    viewMonth++;if(viewMonth>11){viewMonth=0;viewYear++}
+    renderStats(lastData);
+  };
 }
 
 let lastData=[];
@@ -864,7 +889,6 @@ async function renderTable(data){
   const catTotals={};
   let monthExpenseTotal=0;
   monthTx.filter(t=>t.type==='expense').forEach(t=>{catTotals[t.cat]=(catTotals[t.cat]||0)+t.amount;monthExpenseTotal+=t.amount});
-  const monthIncomeTotal=monthTx.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
   const catSorted=Object.entries(catTotals).sort((a,b)=>b[1]-a[1]);
   const catMax=catSorted.length?catSorted[0][1]:1;
 
@@ -905,17 +929,6 @@ async function renderTable(data){
           <div class="cat-bar-bg"><div class="cat-bar" style="transform:scaleX(${(amt/catMax).toFixed(4)});background:${BARS[i%BARS.length]}"></div></div>
           <div class="cat-amt">${fmt(amt)} · ${monthExpenseTotal?Math.round(amt/monthExpenseTotal*100):0}%</div>
         </div>`).join(''):'<div class="empty-txt" style="color:var(--text-3);font-weight:500">Нет расходов в этом месяце</div>'}
-    </div>
-    <div class="stat-block">
-      <div class="sb-title">Итого за месяц</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:600;color:var(--income)">Доход</div>
-        <div style="font-size:15px;font-weight:700;color:var(--income);font-variant-numeric:tabular-nums">${fmt(monthIncomeTotal)}</div>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div style="font-size:13px;font-weight:600;color:var(--expense)">Расход</div>
-        <div style="font-size:15px;font-weight:700;color:var(--expense);font-variant-numeric:tabular-nums">${fmt(monthExpenseTotal)}</div>
-      </div>
     </div>`;
 
   document.getElementById('cal-prev').onclick=()=>{
